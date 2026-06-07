@@ -329,3 +329,64 @@ The role mapping itself is **correct**, but it is surrounded by gaps:
   **not** reach the Skia generic path (valid `region`/`generic` from `AriaMapper` wins
   first); they're only reachable on the native-WASM DOM path. Auto-raised properties also
   include `ItemStatus`/`IsOffscreen` (doesn't change the dead-branch conclusion).
+
+## 9. Tree-walk completeness — NavigationView destinations unreachable to AT (runtime-confirmed)
+
+> **Evidence level: runtime-observed (A11y Inspector over CDP) + code review.** Found while
+> testing the implementation: a `NavigationView` (`PaneDisplayMode="Left"`, pane pinned open)
+> exposes, in the semantic DOM, only the *selected* item plus a stray "More" button — the
+> other destinations are absent. A separate `findings-navigationview-overflow.md` first
+> reported this with a **suspected** width-measurement cause; that cause is **refuted** below.
+
+### 9.1 Refuted hypothesis (width / overflow split)
+
+The doc's suspected "under-sized `availableSize.Width` triggers the top-nav overflow split in
+Left mode" is **refuted in code and at runtime**. `IsTopNavigationView()` is exactly
+`PaneDisplayMode == Top` ([NavigationView.cs:4285](../../src/Uno.UI/UI/Xaml/Controls/NavigationView/NavigationView.cs));
+in `Left` it is false, and *every* entry into the overflow machinery
+(`MeasureOverride`→`HandleTopNavigationMeasureOverride`→`ShrinkTopNavigationSize`/
+`MoveItemsOutOfPrimaryList`, :1505-1523/:3852-3917/:4088-4119) is gated on it — so the split
+**cannot run** in Left mode regardless of width. Runtime corroboration: with the inspector's
+"Relevant only" filter **off**, the destinations are present at **L1 (XAML)** but emit
+**no L2 semantic node** (flagged `⚠ no semantic representation`) — they are not parked in an open
+overflow flyout, confirming this is an emission gap, not a width/overflow effect.
+
+### 9.2 Root cause A (primary, in 003 scope) — virtualized items not registered at AOM build
+
+Left-nav items are hosted in an **`ItemsRepeater`** (`MenuItemsHost`). Both semantic-tree walks
+skip `ItemsRepeater` ([WebAssemblyAccessibility.cs:342](../../src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs)
+and :1176-1179); repeater items are meant to be surfaced via a `VirtualizedSemanticRegion`
+subscribed to `ItemsRepeater.ElementPrepared` in `TryRegisterVirtualizedContainer` (:408-434).
+But that is invoked **only from `OnChildAdded`** (:308), gated by `!_isCreatingAOM` (:291). The
+initial `CreateAOM`→`BuildSemanticsTreeRecursive` runs with `_isCreatingAOM=true` (:713-720) and
+**never registers the region**, so any item already realized when accessibility is enabled emits
+no node and receives no later `ElementPrepared` (it was prepared before any subscription
+existed). → the destinations emit no L2 semantic node and are AT-invisible (the repeater *host*
+emits a `group` div, but its realized children do not). The shell **landmarks DO emit** correctly
+(`region`/`navigation`/`main` per the inspector) — so the gap is specifically the repeater-hosted
+items and their inner `ImplicitTextBlock` labels (the latter also FR-015). **Generalizes** beyond
+NavigationView to *any* `ItemsRepeater`/`ListViewBase` already populated at AOM-enable time — the
+same family as the virtualized-parity gap (§5/§8.2, FR-021/T055).
+
+### 9.3 Root cause B (secondary, in 003 scope) — Collapsed/hidden subtree exposed to AT
+
+Runtime-confirmed by the inspector: the "More" node is `x:Name="TopNavOverflowButton"`, whose
+host `TopNavGrid` is `Collapsed` in non-Top mode (`TopPaneVisibility=Collapsed`,
+NavigationView.cs:4716-4730) — yet it is `rendered? hidden` **but** `in AT tree? exposed`
+(`ignored=False`). So the a11y walker / `IsSemanticElement` does **not** prune
+`Visibility=Collapsed` (or otherwise-hidden) subtrees, exposing a phantom control to AT.
+
+### 9.4 Runtime corroboration of existing FRs (from the same inspector run)
+
+- **FR-018** confirmed: inspector finding `AutomationId not reflected … expected
+  xamlautomationid="NavLandmark", observed (absent)` — AutomationId is not surfaced as a DOM id.
+- **FR-015** confirmed: findings `ImplicitTextBlock "Home"/"Reports"/"Go" has no accessible
+  representation` — standalone/inner text not exposed.
+
+### 9.5 Folded requirements
+
+- **FR-031** (root cause A): register virtualized containers + backfill already-realized items at
+  AOM-build time, not only via the live `OnChildAdded` path.
+- **FR-032** (root cause B): the semantic-tree walker MUST NOT expose `Visibility=Collapsed`/
+  hidden subtrees to AT.
+- The width-measurement fix the source doc proposed is **dropped** (targets an unreachable path).

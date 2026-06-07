@@ -122,7 +122,13 @@ independently shippable increment (mirrors plan.md Phases A–G).
 - [ ] T032 [P] [US7] Completeness gaps that have a concrete source: `aria-busy`(`ItemStatus`), `lang`(`Culture`), in `src/Uno.UI/Accessibility/AriaMapper.cs` + appliers (FR-029). `aria-owns`/`aria-current`/`aria-details` are **out of scope** (no source) per FR-029.
 - [ ] T033 [US7] Run all of T019 → green
 
-**Checkpoint**: ARIA output is correct, complete, and path-consistent.
+### Implementation — tree-walk completeness (P2; runtime-found, research §9)
+
+- [ ] T057 [US7] Register virtualized containers + **backfill already-realized items at AOM-build time**: make `TryRegisterVirtualizedContainer` idempotent and invoke it from `BuildSemanticsTreeRecursive` (not only `OnChildAdded`/`!_isCreatingAOM`), and replay currently-realized repeater children through the `VirtualizedSemanticRegion.OnItemRealized` path, in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs` (~:308,:713-720,:1176) (FR-031; complements T055). Fixes `NavigationView` destinations missing.
+- [ ] T058 [US7] Prune `Visibility=Collapsed`/hidden subtrees in the semantic-tree walk so hidden controls (e.g. the inactive `TopNavOverflowButton`) are not exposed to AT, in `WebAssemblyAccessibility.cs` `IsSemanticElement`/walk (FR-032).
+- [ ] T059 [US7] Verify via the A11y Inspector (runtime) on a pinned-open Left `NavigationView`: all destinations reachable; no `rendered? hidden → in AT tree? exposed` phantom; AutomationId-not-reflected + ImplicitTextBlock findings clear after FR-018/FR-015 land (SC-011).
+
+**Checkpoint**: ARIA output is correct, complete, and path-consistent; all NavigationView destinations reachable; no hidden controls exposed.
 
 ---
 

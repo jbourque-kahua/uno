@@ -368,6 +368,17 @@ and FR-027 together constitute the live-sync coverage:*
   relationships, states) against the live DOM, including a generic-path control and an
   `AutomationId`+`LabeledBy` case (extends FR-016).
 
+**Tree-walk completeness (P2 — runtime-confirmed via the A11y Inspector; see research §9)**
+- **FR-031**: The initial AOM build MUST register virtualized containers (`ItemsRepeater`/
+  `ListViewBase`) **and backfill items already realized at enable time** — not only via the
+  live `OnChildAdded` path (which is gated off during `CreateAOM`). Otherwise destinations
+  already on screen when accessibility is enabled (e.g. `NavigationView` menu items) are never
+  surfaced. Builds on FR-021/T055 (the attribute-parity facet); FR-031 is the registration-
+  timing facet.
+- **FR-032**: The semantic-tree walker MUST NOT expose `Visibility=Collapsed` / hidden subtrees
+  to AT. (Runtime-confirmed: `TopNavOverflowButton` is `rendered? hidden` yet `in AT tree?
+  exposed`, producing a phantom "More" control.)
+
 ### Key Entities
 
 - **Semantic element creation path**: the two routes (type-specific factory vs. generic)
@@ -411,6 +422,10 @@ and FR-027 together constitute the live-sync coverage:*
   to an element present in the AOM (zero dangling references) — verified by tests.
 - **SC-010**: Controls on the generic path expose the same ARIA attribute set as equivalent
   factory-path controls (no attribute is silently dropped by path choice).
+- **SC-011**: All on-screen navigation destinations in a pinned-open `NavigationView` are
+  reachable to AT when accessibility is enabled (no items dropped because they were realized
+  in a repeater before enable), and no `Collapsed`/hidden control (e.g. an inactive "More"
+  button) is exposed — verified by the A11y Inspector / a runtime test.
 
 ## Assumptions
 
