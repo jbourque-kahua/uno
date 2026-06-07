@@ -331,6 +331,56 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Automation
 			Assert.IsTrue(SemanticElementExists(toggling), "A Button that flips Collapsed->Visible must be re-emitted to the AT tree (T058 lazy re-emit).");
 		}
 
+		/// <summary>
+		/// Focus-sync (FR-031, WASM): when XAML focus moves to a NavigationViewItem (a virtualized-container
+		/// item emitted via the region path), DOM/AT focus must land on the ITEM's own semantic node, not its
+		/// container ancestor. Before the fix, ResolveToSemanticHandle missed the item (tracked in the region,
+		/// not _semanticParentMap) and walked up, so document.activeElement was the container. Fails before,
+		/// passes after.
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		[PlatformCondition(ConditionMode.Include, RuntimeTestPlatforms.SkiaWasm)]
+		public async Task When_NavigationViewItem_Focused_Then_Its_Own_Semantic_Node_Receives_DOM_Focus()
+		{
+			var home = new NavigationViewItem { Content = "Home" };
+			var settings = new NavigationViewItem { Content = "Settings" };
+			var nav = new NavigationView
+			{
+				PaneDisplayMode = NavigationViewPaneDisplayMode.Left,
+				IsPaneOpen = true,
+				IsSettingsVisible = false,
+				IsBackButtonVisible = NavigationViewBackButtonVisible.Collapsed,
+				Width = 400,
+				Height = 400,
+			};
+			nav.MenuItems.Add(home);
+			nav.MenuItems.Add(settings);
+
+			await UITestHelper.Load(nav);
+			await UITestHelper.WaitForIdle();
+
+			EnableAccessibilityThroughDom();
+			await UITestHelper.WaitFor(() => SemanticElementExists(settings), timeoutMS: 5000,
+				message: "Timed out waiting for the NavigationView item semantic node.");
+
+			// Move XAML focus to the second destination.
+			settings.Focus(FocusState.Keyboard);
+			await UITestHelper.WaitForIdle();
+
+			var expectedId = GetSemanticElementId(settings);
+
+			// Root cause: DOM/AT focus must be on the item's OWN node, not the container ancestor.
+			await UITestHelper.WaitFor(
+				() => InvokeBrowserJs("(function(){return document.activeElement ? document.activeElement.id : '';})()") == expectedId,
+				timeoutMS: 5000,
+				message: "DOM focus did not move to the NavigationViewItem's own semantic node (focus-sync resolution gap).");
+
+			var activeId = InvokeBrowserJs("(function(){return document.activeElement ? document.activeElement.id : '';})()");
+			Assert.AreEqual(expectedId, activeId,
+				"A focused NavigationViewItem's own DOM node must be document.activeElement, not its container ancestor.");
+		}
+
 		private static void EnableAccessibilityThroughDom()
 		{
 			InvokeBrowserJs("(function(){const button = document.getElementById('uno-enable-accessibility'); if (button) { button.click(); } return 'ok';})()");

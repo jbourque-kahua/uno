@@ -68,6 +68,24 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 	private const int PreserveTextSelectionSentinel = -1;
 
 	/// <summary>
+	/// True if the handle is a currently-realized item inside a virtualized container — it has a
+	/// uno-semantics-{handle} DOM node created via VirtualizedSemanticRegion (not via the normal
+	/// _semanticParentMap path), so focus/membership resolution must recognize it.
+	/// </summary>
+	private bool IsRealizedVirtualizedItem(IntPtr handle)
+	{
+		foreach (var region in _virtualizedRegions)
+		{
+			if (region.ContainsRealizedHandle(handle))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/// <summary>
 	/// Resolves a UIElement to the nearest handle that exists in the semantic DOM tree.
 	/// If the element itself is in the semantic tree, returns its handle.
 	/// Otherwise, walks up the visual tree to find the nearest semantic ancestor.
@@ -79,6 +97,15 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 
 		// Check if this element is directly in the semantic tree
 		if (_semanticParentMap.ContainsKey(handle))
+		{
+			return handle;
+		}
+
+		// A realized virtualized item (NavigationViewItem / ListViewItem) has its own
+		// uno-semantics-{handle} DOM node created via VirtualizedSemanticRegion, tracked there rather
+		// than in _semanticParentMap. Resolve focus to the item itself so XAML focus moves DOM focus
+		// onto it instead of walking up to the container ancestor.
+		if (IsRealizedVirtualizedItem(handle))
 		{
 			return handle;
 		}
@@ -118,6 +145,11 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 	internal bool HasSemanticElement(IntPtr handle)
 	{
 		if (_semanticParentMap.ContainsKey(handle))
+		{
+			return true;
+		}
+
+		if (IsRealizedVirtualizedItem(handle))
 		{
 			return true;
 		}
