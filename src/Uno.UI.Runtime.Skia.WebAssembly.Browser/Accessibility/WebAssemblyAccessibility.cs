@@ -1048,7 +1048,7 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 			{
 				return true;
 			}
-			return false;
+			return IsStandaloneBodyText(element);
 		}
 
 		// Elements with an automation peer are semantic.
@@ -1103,6 +1103,63 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 		}
 
 		// Everything else (Grid, Border, ContentPresenter, StackPanel, etc.) is structural
+		return false;
+	}
+
+	/// <summary>
+	/// FR-015: a plain TextBlock is exposed as standalone body text only when its text is not
+	/// already carried by an ancestor control's accessible name (else it would be announced twice).
+	/// </summary>
+	private static bool IsStandaloneBodyText(UIElement element)
+	{
+		// RichTextBlockOverflow is the paired-display target of a primary RichTextBlock — never standalone.
+		if (element is RichTextBlockOverflow)
+		{
+			return false;
+		}
+
+		// Only TextBlock exposes reliable plain text here; RichTextBlock has no GetPlainText source
+		// so it stays pruned (documented FR-015 limitation).
+		var text = (element as TextBlock)?.Text;
+		if (string.IsNullOrWhiteSpace(text))
+		{
+			return false;
+		}
+
+		return !IsAbsorbedByAncestorName(element, text);
+	}
+
+	private static bool IsAbsorbedByAncestorName(UIElement element, string ownText)
+	{
+		var node = element.GetParent() as UIElement;
+		for (var depth = 0; node is not null && depth < 6; depth++, node = node.GetParent() as UIElement)
+		{
+			// Identity: a ContentControl whose Content IS this element (or whose string content matches)
+			// names itself from it (AriaMapper.ResolveLabel / FR-033), so the text is already announced.
+			if (node is ContentControl contentControl)
+			{
+				if (ReferenceEquals(contentControl.Content, element))
+				{
+					return true;
+				}
+				if (contentControl.Content is string s && string.Equals(s, ownText, StringComparison.Ordinal))
+				{
+					return true;
+				}
+			}
+
+			// First peer-bearing ancestor with a resolved name decides: equal to this text => absorbed;
+			// named from something else => this text is not its label and remains standalone.
+			if (node.GetOrCreateAutomationPeer() is { } peer)
+			{
+				var name = AriaMapper.ResolveLabel(peer);
+				if (!string.IsNullOrEmpty(name))
+				{
+					return string.Equals(name, ownText, StringComparison.Ordinal);
+				}
+			}
+		}
+
 		return false;
 	}
 

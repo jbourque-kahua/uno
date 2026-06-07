@@ -79,6 +79,53 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Automation
 			Assert.AreEqual(name, attributes.Label, "aria-label must be the resolved Name");
 			Assert.AreNotEqual(automationId, attributes.Label, "aria-label must not be the AutomationId even when a Name is also set");
 		}
+
+		/// <summary>
+		/// Regression (FR-015): a TextBlock kept for an explicit LiveSetting/AutomationId must NOT be
+		/// classified as a bare Text element (which emits only textContent and drops aria-live/xamlautomationid).
+		/// It must map to Generic so the generic path re-emits those attributes. Guards the FR-015 over-capture
+		/// regression where every kept TextBlock was routed to the Text element.
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		public async Task When_LiveRegion_TextBlock_Then_SemanticType_Is_Generic()
+		{
+			var textBlock = new TextBlock { Text = "Ready" };
+			AutomationProperties.SetLiveSetting(textBlock, AutomationLiveSetting.Polite);
+			AutomationProperties.SetAutomationId(textBlock, "ButtonsStatus");
+
+			await UITestHelper.Load(textBlock);
+
+			var peer = FrameworkElementAutomationPeer.CreatePeerForElement(textBlock);
+			Assert.IsNotNull(peer, "TextBlock should have an automation peer");
+
+			Assert.AreEqual(
+				SemanticElementType.Generic,
+				AriaMapper.GetSemanticElementType(peer, textBlock),
+				"A TextBlock with an explicit LiveSetting/AutomationId must take the generic path so aria-live and xamlautomationid are still emitted, not the bare Text path.");
+		}
+
+		/// <summary>
+		/// FR-015 preserved: a plain body TextBlock with no explicit automation properties must still be
+		/// classified as a Text element (emitted as a bare &lt;p&gt; carrying only its text). Guards against the
+		/// regression fix over-triggering and turning ordinary body text into generic nodes.
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		public async Task When_Plain_TextBlock_Then_SemanticType_Is_Text()
+		{
+			var textBlock = new TextBlock { Text = "Some body paragraph." };
+
+			await UITestHelper.Load(textBlock);
+
+			var peer = FrameworkElementAutomationPeer.CreatePeerForElement(textBlock);
+			Assert.IsNotNull(peer, "TextBlock should have an automation peer");
+
+			Assert.AreEqual(
+				SemanticElementType.Text,
+				AriaMapper.GetSemanticElementType(peer, textBlock),
+				"A plain body TextBlock (no Name/Landmark/LiveSetting/AutomationId) must remain a bare Text element.");
+		}
 #endif
 
 #if __SKIA__
@@ -110,6 +157,34 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Automation
 
 			var ariaLabel = GetSemanticAttribute(button, "aria-label");
 			Assert.AreNotEqual(automationId, ariaLabel, "aria-label must not be sourced from the AutomationId on the DOM path.");
+		}
+
+		/// <summary>
+		/// Regression (FR-015, WASM DOM seam): a TextBlock kept for an explicit LiveSetting + AutomationId must
+		/// emit BOTH aria-live and xamlautomationid on its semantic element. FR-015 initially routed every
+		/// TextBlock through the bare Text element (textContent only), dropping these; the fix routes
+		/// explicit-property TextBlocks through the generic path. Fails before the fix, passes after.
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		[PlatformCondition(ConditionMode.Include, RuntimeTestPlatforms.SkiaWasm)]
+		public async Task When_LiveRegion_TextBlock_On_Wasm_Then_AriaLive_And_XamlAutomationId_Are_Emitted()
+		{
+			const string automationId = "ButtonsStatus";
+
+			var textBlock = new TextBlock { Text = "Ready" };
+			AutomationProperties.SetLiveSetting(textBlock, AutomationLiveSetting.Polite);
+			AutomationProperties.SetAutomationId(textBlock, automationId);
+
+			await UITestHelper.Load(textBlock);
+			textBlock.GetOrCreateAutomationPeer();
+
+			EnableAccessibilityThroughDom();
+			await UITestHelper.WaitFor(() => SemanticElementExists(textBlock), timeoutMS: 5000, message: "Timed out waiting for the semantic element to be created.");
+			await UITestHelper.WaitForIdle();
+
+			Assert.AreEqual("polite", GetSemanticAttribute(textBlock, "aria-live"), "A LiveSetting=Polite TextBlock must emit aria-live=polite (regressed by FR-015's bare Text path).");
+			Assert.AreEqual(automationId, GetSemanticAttribute(textBlock, "xamlautomationid"), "An AutomationId on a kept TextBlock must be emitted as xamlautomationid (regressed by FR-015's bare Text path).");
 		}
 
 		private static void EnableAccessibilityThroughDom()

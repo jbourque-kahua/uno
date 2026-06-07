@@ -9,6 +9,7 @@ namespace Uno.UI.Runtime.Skia {
 		| 'togglebutton' // <button aria-pressed>
 		| 'switch'       // <button role="switch" aria-checked>
 		| 'heading'      // <h1>-<h6> (VoiceOver rotor heading navigation)
+		| 'text'         // <p> (block) / <span> (inline) non-interactive body text
 		| 'checkbox'     // <input type="checkbox">
 		| 'radio'        // <input type="radio">
 		| 'slider'       // <input type="range">
@@ -478,6 +479,34 @@ namespace Uno.UI.Runtime.Skia {
 			}
 
 			element.setAttribute('aria-level', String(clampedLevel));
+
+			this.appendToParent(element, parentHandle, index);
+		}
+
+		public static createTextElement(
+			parentHandle: number,
+			handle: number,
+			index: number | null,
+			x: number,
+			y: number,
+			width: number,
+			height: number,
+			text: string,
+			isBlock: boolean,
+			isFocusable: boolean
+		): void {
+			const element = document.createElement(isBlock ? 'p' : 'span');
+			this.applyCommonStyles(element, x, y, width, height, handle);
+
+			// Standalone body text: non-interactive, not a tab stop. Only textContent is exposed
+			// (no aria-label, no role) so it is read once as plain text. isFocusable is unused.
+			element.style.pointerEvents = 'none';
+			element.style.margin = '0';
+			element.style.padding = '0';
+			element.style.fontSize = 'inherit';
+			element.style.fontWeight = 'inherit';
+
+			element.textContent = text;
 
 			this.appendToParent(element, parentHandle, index);
 		}

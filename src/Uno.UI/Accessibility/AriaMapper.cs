@@ -102,8 +102,30 @@ public static class AriaMapper
 			AutomationControlType.DataItem => SemanticElementType.GridRow,
 			AutomationControlType.Menu => SemanticElementType.Menu,
 			AutomationControlType.MenuItem => SemanticElementType.MenuItem,
+			AutomationControlType.Text => GetTextSemanticType(owner),
 			_ => SemanticElementType.Generic
 		};
+	}
+
+	/// <summary>
+	/// Classifies a non-heading text element. A TextBlock reaches the factory either as plain
+	/// standalone body text (FR-015 — emit a bare &lt;p&gt; carrying only its text) or because it was
+	/// kept for an explicit automation property (Name / Landmark / LiveSetting / AutomationId), which
+	/// needs the full ARIA surface (role, aria-label, aria-live, xamlautomationid). Only the former is
+	/// a Text element; the latter takes the generic path so those attributes are still emitted.
+	/// </summary>
+	private static SemanticElementType GetTextSemanticType(UIElement? owner)
+	{
+		if (owner is not null &&
+			(!string.IsNullOrEmpty(AutomationProperties.GetName(owner)) ||
+			AutomationProperties.GetLandmarkType(owner) != AutomationLandmarkType.None ||
+			AutomationProperties.GetLiveSetting(owner) != AutomationLiveSetting.Off ||
+			!string.IsNullOrEmpty(AutomationProperties.GetAutomationId(owner))))
+		{
+			return SemanticElementType.Generic;
+		}
+
+		return SemanticElementType.Text;
 	}
 
 	private static SemanticElementType GetButtonType(AutomationPeer peer)
@@ -470,6 +492,8 @@ public enum SemanticElementType
 {
 	/// <summary>div with ARIA role</summary>
 	Generic,
+	/// <summary>non-interactive <p>/<span> standalone body text (no role, no tabindex)</summary>
+	Text,
 	/// <summary>button element</summary>
 	Button,
 	/// <summary>heading element (h1-h6)</summary>

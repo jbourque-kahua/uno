@@ -74,8 +74,16 @@ internal static partial class SemanticElementFactory
 			SemanticElementType.ColumnHeader => CreateColumnHeaderElement(peer, handle, parentHandle, index, x, y, width, height, attributes, isFocusable),
 			SemanticElementType.Menu => CreateMenuElement(peer, handle, parentHandle, index, x, y, width, height, attributes, isFocusable),
 			SemanticElementType.MenuItem => CreateMenuItemElement(peer, handle, parentHandle, index, x, y, width, height, attributes, isFocusable),
+			SemanticElementType.Text => CreateTextElement(peer, handle, parentHandle, index, x, y, width, height, attributes, owner, isFocusable),
 			_ => CreateGenericElement(peer, handle, parentHandle, index, x, y, width, height, attributes, isFocusable)
 		};
+
+		// Standalone body text carries only its textContent (set at creation) — it must NOT receive
+		// aria-label/description/posinset/etc., which would duplicate the announced text.
+		if (elementType == SemanticElementType.Text)
+		{
+			return created;
+		}
 
 		// Ensure aria-label is applied for all control types (FR-030, WCAG 4.1.2)
 		// Button/Checkbox/Radio already pass label during creation; apply for others
@@ -554,6 +562,34 @@ internal static partial class SemanticElementFactory
 			level,
 			attributes.Label,
 			isFocusable);
+		return true;
+	}
+
+	/// <summary>
+	/// FR-015: creates a non-interactive standalone body-text element (&lt;p&gt; block / &lt;span&gt; inline).
+	/// Only its textContent is exposed — no role, no aria-label, no tabindex.
+	/// </summary>
+	private static bool CreateTextElement(
+		AutomationPeer peer,
+		IntPtr handle,
+		IntPtr parentHandle,
+		int? index,
+		float x,
+		float y,
+		float width,
+		float height,
+		AriaAttributes attributes,
+		UIElement? owner,
+		bool isFocusable)
+	{
+		var text = !string.IsNullOrEmpty(attributes.Label) ? attributes.Label : (owner as TextBlock)?.Text;
+		if (string.IsNullOrEmpty(text))
+		{
+			return false;
+		}
+
+		// TextBlock/RichTextBlock are leaf, block-level controls in the AOM — emit <p>.
+		NativeMethods.CreateTextElement(parentHandle, handle, index, x, y, width, height, text, true, isFocusable);
 		return true;
 	}
 
@@ -1086,6 +1122,9 @@ internal static partial class SemanticElementFactory
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.SemanticElements.createHeadingElement")]
 		internal static partial void CreateHeadingElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, int level, string? label, bool isFocusable);
+
+		[JSImport("globalThis.Uno.UI.Runtime.Skia.SemanticElements.createTextElement")]
+		internal static partial void CreateTextElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string text, bool isBlock, bool isFocusable);
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.SemanticElements.createToggleButtonElement")]
 		internal static partial void CreateToggleButtonElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string? label, string pressed, bool disabled, bool isFocusable);
