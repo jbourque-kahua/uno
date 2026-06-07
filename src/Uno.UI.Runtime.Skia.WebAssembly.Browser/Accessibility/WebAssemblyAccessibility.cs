@@ -297,6 +297,14 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 		{
 			TrySubscribeScrollSource(child);
 
+			// FR-032/T058: a Collapsed element (and its whole subtree) is not rendered — skip both
+			// emission and recursion so its descendants do not leak into the AT tree (WinUI: Collapsed
+			// is absent from the UIA tree). Equivalent to !child.Visual.IsVisible.
+			if (IsPrunedAsHidden(child))
+			{
+				return;
+			}
+
 			var isChildSemantic = IsSemanticElement(child);
 
 			if (this.Log().IsEnabled(LogLevel.Trace))
@@ -1035,6 +1043,16 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 	}
 
 	/// <summary>
+	/// FR-032/T058: a Collapsed element (and its entire subtree) is not rendered and must not be
+	/// exposed to assistive technology — matching WinUI (Collapsed is absent from the UIA tree) and
+	/// the framework's own render walk (which skips {IsVisible:false} subtrees). Equivalent to
+	/// !element.Visual.IsVisible (set only from Arrange's Visibility==Collapsed branch), but read
+	/// from the Visibility DP so it also prunes a Collapsed element that has not yet been arranged.
+	/// </summary>
+	private static bool IsPrunedAsHidden(UIElement element)
+		=> element.Visibility == Visibility.Collapsed;
+
+	/// <summary>
 	/// Determines whether a UIElement should be included in the semantic accessibility tree.
 	/// Elements without an automation peer, ARIA role, or automation ID are purely structural
 	/// (e.g., Grid, Border, ContentPresenter) and are pruned to reduce DOM bloat.
@@ -1228,6 +1246,14 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 		Debug.Assert(IsAccessibilityEnabled);
 
 		TrySubscribeScrollSource(child);
+
+		// FR-032/T058: a Collapsed element (and its whole subtree) is not rendered — skip both
+		// emission and recursion so its descendants do not leak into the AT tree (WinUI: Collapsed
+		// is absent from the UIA tree). Equivalent to !child.Visual.IsVisible.
+		if (IsPrunedAsHidden(child))
+		{
+			return;
+		}
 
 		var handle = child.Visual.Handle;
 		var isSemantic = IsSemanticElement(child);

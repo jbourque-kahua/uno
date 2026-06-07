@@ -227,6 +227,35 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Automation
 			Assert.IsTrue(SemanticElementExists(settings), "NavigationView item 'Settings' must emit a semantic node when accessibility is enabled after load.");
 		}
 
+		/// <summary>
+		/// T058 (FR-032, WASM): a Collapsed element must NOT be emitted to the AT tree (WinUI parity —
+		/// Collapsed is absent from UIA), while a Visible sibling still emits. Guards the visibility-prune
+		/// in the semantic-tree walk; the positive guard ensures the prune is not vacuously over-broad.
+		/// Uses a typed Button (the SemanticElementFactory path that never threaded visibility).
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		[PlatformCondition(ConditionMode.Include, RuntimeTestPlatforms.SkiaWasm)]
+		public async Task When_Element_Collapsed_Then_No_Semantic_Node_While_Visible_Sibling_Emits()
+		{
+			var hidden = new Button { Content = "HiddenBtn", Visibility = Visibility.Collapsed };
+			var visible = new Button { Content = "VisibleBtn" };
+			var panel = new StackPanel();
+			panel.Children.Add(hidden);
+			panel.Children.Add(visible);
+
+			await UITestHelper.Load(panel);
+			await UITestHelper.WaitForIdle();
+
+			EnableAccessibilityThroughDom();
+			await UITestHelper.WaitFor(() => SemanticElementExists(visible), timeoutMS: 5000,
+				message: "Timed out waiting for the visible button's semantic node.");
+			await UITestHelper.WaitForIdle();
+
+			Assert.IsTrue(SemanticElementExists(visible), "A visible Button must emit a semantic node.");
+			Assert.IsFalse(SemanticElementExists(hidden), "A Collapsed Button must NOT emit a semantic node (FR-032/T058).");
+		}
+
 		private static void EnableAccessibilityThroughDom()
 		{
 			InvokeBrowserJs("(function(){const button = document.getElementById('uno-enable-accessibility'); if (button) { button.click(); } return 'ok';})()");
