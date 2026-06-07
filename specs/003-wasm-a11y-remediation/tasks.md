@@ -1,0 +1,283 @@
+---
+description: "Task list for WASM Accessibility Remediation"
+---
+
+# Tasks: WASM Accessibility Remediation
+
+**Input**: Design documents from `/specs/003-wasm-a11y-remediation/`
+**Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/interop-contracts.md, quickstart.md
+
+**Tests**: INCLUDED. The constitution (Principle III) mandates fails-before/passes-after
+runtime tests, and the feature's whole point includes establishing the DOM-level coverage
+that is currently absent (FR-016/017/030). Every story is test-first.
+
+**Organization**: By user story (US1–US7 from spec.md), priority order. Each story is an
+independently shippable increment (mirrors plan.md Phases A–G).
+
+## Format: `[ID] [P?] [Story] Description`
+
+- **[P]**: Can run in parallel (different files, no dependency on incomplete tasks)
+- **[Story]**: US1–US7 (user-story phases only)
+- All paths are repo-relative.
+
+## ⚠️ Open decisions that gate some tasks (resolve before the marked tasks)
+
+- **FR-015 body text** (US5): emit `<p>`/`<span>` for standalone text vs. keep pruning — *owner decision*.
+- **FR-007 composite tabindex model** (US2): roving active-item vs. container+`aria-activedescendant` — plan recommends **roving**; T0-marked tasks assume roving unless changed.
+- **FR-013 region liveness** (US5): creation-time gating now vs. live scrollability transitions — plan recommends creation-time now.
+
+---
+
+## Phase 1: Setup (Shared Infrastructure)
+
+**Purpose**: Build/test harness ready; baseline captured.
+
+- [ ] T001 Verify Skia-WASM build + runtime-test execution per `specs/003-wasm-a11y-remediation/quickstart.md` (`crosstargeting_override.props` net10.0, `Uno.UI-Wasm-only.slnf`, `/runtime-tests` skill)
+- [ ] T002 [P] Capture the current failing behavior (radio unchecked, heading is a tab stop, `AutomationId`→`aria-label`, `LabeledBy` flattened) as a short repro note in `specs/003-wasm-a11y-remediation/checklists/baseline.md`
+
+---
+
+## Phase 2: Foundational (Blocking Prerequisites)
+
+**Purpose**: Shared mechanisms that multiple stories build on. **⚠️ Complete before the dependent story tasks** (test helper blocks all test tasks; the live-sync mechanism blocks US3/US4/US7 live-sync).
+
+- [ ] T003 Add a runtime-test helper that enables the AOM in-test and queries the semantic DOM (`document.getElementById('uno-semantics-{handle}')`) returning role/`aria-*`/`tabIndex`/`checked`, in `src/Uno.UI.RuntimeTests/Tests/Windows_UI_Xaml_Automation/AccessibilityTestHelper.cs` (extend the existing `EnableAccessibilityThroughDom` usage) — blocks every test task below
+- [ ] T004 Establish the live-sync mechanism: chain the WASM `NotifyPropertyChangedEventCore` override to base (or introduce a property→attribute map) so per-property branches add cleanly, in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs` (FR-010) — blocks US3/US4/US7 live-sync tasks
+- [ ] T005 [P] Add an `isFocusable` parameter to the `Create*Element` JSImport signatures + a shared "apply full `GetAriaAttributes` set" entry point usable by both the factory and generic paths, in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/SemanticElementFactory.cs` (plumbing only; enabler for US2 FR-005 and US7 FR-021) — touches shared signatures, do before US2/US7 impl
+
+**Checkpoint**: Test helper + live-sync + factory plumbing ready — user stories can proceed.
+
+---
+
+## Phase 3: User Story 1 - RadioButton usable by screen-reader & keyboard (Priority: P1) 🎯 MVP
+
+**Goal**: A `RadioButton` group renders the correct checked state, is selectable via the DOM, syncs on external change, and has exactly one tab stop per group (FR-001–004).
+
+**Independent Test**: Build a group with one `IsChecked=true`; enable AOM; assert the `<input type=radio>` is `checked`, DOM activation selects the peer, code-side `IsChecked` flips the native `checked`, and one radio per group is `tabindex=0`.
+
+### Tests (write first, must FAIL)
+
+- [ ] T006 [P] [US1] Failing DOM-level tests for RadioButton in `src/Uno.UI.RuntimeTests/Tests/Windows_UI_Xaml_Automation/Given_AccessibleCheckBox.cs`: initial `checked` from `IsChecked`; DOM `change`→peer selection; external `IsChecked`→native `checked` (not `aria-selected`); one `tabindex=0` per group (uses T003)
+
+### Implementation
+
+- [ ] T007 [US1] Populate initial radio `checked` from `RadioButton.IsChecked` (not the absent Toggle pattern) in `src/Uno.UI/Accessibility/AriaMapper.cs` (FR-001)
+- [ ] T008 [US1] Pass the initial `checked` into `CreateRadioElement` in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/SemanticElementFactory.cs` (FR-001)
+- [ ] T009 [US1] Route the radio DOM `change` to a selection JSExport (`OnSelect`→`ISelectionItemProvider.Select`) instead of `onToggle`, in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/ts/Runtime/SemanticElements.ts` and `.../Accessibility/WebAssemblyAccessibility.cs` (FR-002)
+- [ ] T010 [US1] On external `IsChecked`/`IsSelected` change, update the radio's native `checked` via the `updateAriaChecked` path (not `aria-selected`) in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs` (FR-003)
+- [ ] T011 [US1] Radio roving at creation: exactly one radio per group `tabindex=0`, rest `-1`, in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/ts/Runtime/SemanticElements.ts` `createRadioElement` (FR-004)
+- [ ] T012 [US1] Run T006 → green; validate on Skia Desktop too (shared `AriaMapper` change — plan watch-item)
+
+**Checkpoint**: RadioButton fully operable (MVP).
+
+---
+
+## Phase 4: User Story 2 - Non-interactive elements are not tab stops (Priority: P1)
+
+**Goal**: `tabindex` is gated on real focusability across both creation paths; headings/landmarks/group-containers leave the tab order; composites have one roving tab stop; disabled div-composites are not tabbable (FR-005–008, FR-012). *Depends on T005.*
+
+**Independent Test**: Render headings, a ListBox, a TabControl, a Menu, and an `IsTabStop=false` control; enable AOM; assert only genuinely interactive controls are tab stops.
+
+### Tests (write first, must FAIL)
+
+- [ ] T013 [P] [US2] Failing tests in new `src/Uno.UI.RuntimeTests/Tests/Windows_UI_Xaml_Automation/Given_AccessibleTabindex.cs`: heading not a tab stop; `IsTabStop=false`/disabled control not a tab stop; composite container is not a second tab stop; arrow-nav moves the single roving stop (uses T003)
+
+### Implementation
+
+- [ ] T014 [US2] Honor `isFocusable` in each `create*Element` via `updateElementFocusability` and **remove the hardcoded heading `tabIndex=0`**, in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/ts/Runtime/SemanticElements.ts` (FR-005/006; consumes T005)
+- [ ] T015 [US2] Apply one consistent **roving** composite model (container `-1`/active-item `0`) for listbox/tablist/tree/menu/grid AND the virtualized container fast-path in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/ts/Runtime/SemanticElements.ts` (FR-007)
+- [ ] T016 [US2] Drive `UpdateRovingTabindex` from focus movement (call from `OnXamlGotFocus`/`OnBrowserFocus`) + promote one item at creation, in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/FocusSynchronizer.cs` (FR-012)
+- [ ] T017 [US2] Remove the tab stop from div/table composites when disabled, at creation and in `updateDisabledState`, in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/ts/Runtime/SemanticElements.ts` (FR-008)
+- [ ] T018 [US2] Run T013 → green
+
+**Checkpoint**: Tab order contains only interactive controls.
+
+---
+
+## Phase 5: User Story 7 - ARIA attributes correct, complete, consistent (Priority: P1 → P2)
+
+**Goal**: Fix wrong-target mappings, close factory/generic divergence, eliminate dangling IDREFs, and map the unmapped attributes (FR-018–030). *G1 = P1; G2 = P2. Depends on T004/T005.*
+
+**Independent Test**: Assert emitted `role`/`aria-label`/`aria-labelledby`/relationship IDREFs/state attrs against the live DOM, including a generic-path control (Image/Group) and an `AutomationId`+`LabeledBy` case.
+
+### Tests (write first, must FAIL)
+
+- [ ] T019 [P] [US7] Failing tests in new `src/Uno.UI.RuntimeTests/Tests/Windows_UI_Xaml_Automation/Given_AccessibleAria.cs`: `AutomationId` not `aria-label` (→ `xamlautomationid`); `LabeledBy`→`aria-labelledby`; valid role tokens (`img`/`textbox`); generic-path control carries full attrs; no dangling IDREF; `aria-invalid`/`aria-orientation` present (FR-030)
+
+### Implementation — G1 (P1)
+
+- [ ] T020 [US7] Source `aria-label` only from `ResolveLabel`; surface `AutomationId` as a DOM id (`xamlautomationid`/`data-*`), in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs` + `.../ts/Runtime/Accessibility.ts` (FR-018)
+- [ ] T021 [US7] Populate `AriaAttributes.LabelledBy` in `src/Uno.UI/Accessibility/AriaMapper.cs` and emit `aria-labelledby` (resolve labeller's semantic id) on both paths in `WebAssemblyAccessibility.cs` + `Accessibility.ts` (FR-019)
+- [ ] T022 [US7] Normalize `FindHtmlRole` UIA tokens → valid ARIA (`image`→`img`, `edit`→`textbox`, drop `pane`/`window`/`custom`/…) and reconcile `ToggleSwitch`→`switch`, in `src/Uno.UI/UI/Xaml/Automation/AutomationProperties.uno.cs` (FR-020; shared C# — validate the native path too)
+- [ ] T023 [US7] Apply the full `GetAriaAttributes` set on the generic `AddSemanticElement` path (describedby/controls/flowto/required/description/posinset/setsize/selected/valuenow/modal+`role=dialog`) in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs` (FR-021; consumes T005)
+- [ ] T024 [US7] IDREF integrity: emit relationship ids only when `HasSemanticElement(handle)`, clear on remove/deselect, with defensive `getElementById` guards, in `SemanticElementFactory.cs` + `WebAssemblyAccessibility.cs` + `Accessibility.ts` (FR-022)
+- [ ] T025 [US7] Run the G1 subset of T019 → green
+
+### Implementation — G2 (P2)
+
+- [ ] T026 [P] [US7] Map `aria-invalid` from `IsDataValidForForm` (inverted) + live-sync, in `src/Uno.UI/Accessibility/AriaMapper.cs` + `WebAssemblyAccessibility.cs` + `Accessibility.ts` (FR-023; live-sync consumes T004)
+- [ ] T027 [P] [US7] Map `aria-orientation` for Slider/ScrollBar (replace `orient`/CSS) in `SemanticElementFactory.cs` + `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/ts/Runtime/SemanticElements.ts` (FR-024)
+- [ ] T028 [US7] Source `aria-roledescription` from `LocalizedControlType` AND `LocalizedLandmarkType` on **all** landmark types, gated on an accessible name, in `src/Uno.UI/Accessibility/AriaMapper.cs` + `WebAssemblyAccessibility.cs` (FR-025; pairs with US5 T041)
+- [ ] T029 [P] [US7] Map `aria-level` from `AutomationProperties.Level` (distinct from `HeadingLevel`) in `src/Uno.UI/Accessibility/AriaMapper.cs` (FR-026)
+- [ ] T030 [US7] Add live-sync branches + wire the missing changed-callbacks/raises for `LandmarkType`/`LocalizedLandmarkType`/`FullDescription`/`IsRequiredForForm`/`IsDialog`/`LiveSetting`/`AcceleratorKey`/`AccessKey`, in `src/Uno.UI/UI/Xaml/Automation/AutomationProperties.cs` + `WebAssemblyAccessibility.cs`; preserve `FullDescription`>`HelpText` precedence (FR-027; consumes T004)
+- [ ] T031 [US7] Value-semantics: `aria-haspopup` from the C# value; `AccessKey`→HTML `accesskey`; stop injecting posinset "N of M" into `aria-label`; revisit hardcoded `aria-atomic`, in `src/Uno.UI/Accessibility/AriaMapper.cs` + `SemanticElements.ts`/`Accessibility.ts` (FR-028)
+- [ ] T032 [P] [US7] Completeness gaps where a source exists: `aria-busy`(`ItemStatus`), `lang`(`Culture`), `aria-owns`/`current`/`details`, in `src/Uno.UI/Accessibility/AriaMapper.cs` + appliers (FR-029)
+- [ ] T033 [US7] Run all of T019 → green
+
+**Checkpoint**: ARIA output is correct, complete, and path-consistent.
+
+---
+
+## Phase 6: User Story 4 - Headings expose the correct level (Priority: P2)
+
+**Goal**: Levels 1–6 map exactly; 7–9 clamp the `<hN>` tag to `<h6>` but `aria-level` carries the true level; `aria-level` live-syncs (FR-011). *Depends on T004.*
+
+**Independent Test**: Set `HeadingLevel=Level7`; assert `<h6>` with `aria-level=7`; change the level at runtime and assert `aria-level` updates.
+
+### Tests (write first, must FAIL)
+
+- [ ] T034 [P] [US4] Failing tests in new `src/Uno.UI.RuntimeTests/Tests/Windows_UI_Xaml_Automation/Given_AccessibleHeading.cs`: levels 1–6 tag+`aria-level`; 7–9 → `<h6>`+`aria-level` 7–9; runtime `HeadingLevel` change updates `aria-level` (uses T003)
+
+### Implementation
+
+- [ ] T035 [US4] Level 7–9 passthrough: `aria-level` carries the true level (1–9), tag clamped to `<h6>`, in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/ts/Runtime/SemanticElements.ts` `createHeadingElement` + `src/Uno.UI/Accessibility/AriaMapper.cs` (FR-011)
+- [ ] T036 [US4] Heading live-sync: `HeadingLevel` change updates `aria-level` (wire the raise + branch; tag re-creation best-effort), in `src/Uno.UI/UI/Xaml/Automation/AutomationProperties.cs` + `WebAssemblyAccessibility.cs` (FR-011; consumes T004; relates to T030)
+- [ ] T037 [US4] Run T034 → green
+
+**Checkpoint**: Heading levels correct and live. (Heading-not-a-tab-stop is delivered by US2/T014.)
+
+---
+
+## Phase 7: User Story 3 - Dynamic state changes reach AT (Priority: P2)
+
+**Goal**: PasswordBox value, placeholder, and `aria-required` reflect runtime changes (FR-009). *Depends on T004.*
+
+**Independent Test**: Change each property in code after creation; assert the DOM attribute updates.
+
+### Tests (write first, must FAIL)
+
+- [ ] T038 [P] [US3] Failing tests in `src/Uno.UI.RuntimeTests/Tests/Windows_UI_Xaml_Automation/Given_AccessibleTextBox.cs`: programmatic `PasswordBox.Password` live-syncs (masked); runtime `PlaceholderText` change; runtime `aria-required` change (uses T003)
+
+### Implementation
+
+- [ ] T039 [US3] Raise a value automation event for `PasswordBox` (masked) so the existing `Value` sync path fires — fix the `peer is TextBoxAutomationPeer` gate, in `src/Uno.UI/UI/Xaml/Controls/PasswordBox/PasswordBox.cs` + `PasswordBoxAutomationPeer.cs` (and `TextBox.cs:361` guard) (FR-009; consult WinUI per Constitution VII; shared-code watch-item)
+- [ ] T040 [US3] Add `PlaceholderText` and `IsRequiredForForm` live-sync branches in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs` (FR-009; consumes T004; pairs with T030)
+- [ ] T041 [US3] Run T038 → green
+
+**Checkpoint**: Runtime state changes reach AT.
+
+---
+
+## Phase 8: User Story 5 - Scrollable regions meaningful; static text reachable (Priority: P3)
+
+**Goal**: `role=region` only for scrollable + named ScrollViewers; meaningful `aria-label`; the body-text decision implemented (FR-013–015). *FR-015 blocked on owner decision.*
+
+**Independent Test**: Non-scrollable ScrollViewer → no region; scrollable+named → labeled region; unlabeled landmark not emitted; standalone body text exposed per chosen design.
+
+### Tests (write first, must FAIL)
+
+- [ ] T042 [P] [US5] Failing tests in new `src/Uno.UI.RuntimeTests/Tests/Windows_UI_Xaml_Automation/Given_AccessibleScrollViewer.cs`: non-scrollable → no `region`; scrollable+named → labeled `role=region`; no unlabeled region; no `aria-roledescription` without a name (uses T003)
+
+### Implementation
+
+- [ ] T043 [US5] Gate `role=region` on actual scrollability (`IScrollProvider`) AND a real accessible name (`ResolveLabel`, not raw `GetName()`), in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs` + `src/Uno.UI/Accessibility/AriaMapper.cs` (FR-013)
+- [ ] T044 [US5] Enforce "every landmark/region MUST have a name; never emit `aria-roledescription` without one" in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs` (FR-014; pairs with US7 T028)
+- [ ] T045 [US5] **[BLOCKED on FR-015 decision]** Implement the body-text approach — gated standalone `<p>`/`<span>` emission OR documented keep-pruning — in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs` `IsSemanticElement` (+ factory if emitting) (FR-015)
+- [ ] T046 [US5] Run T042 → green
+
+**Checkpoint**: Landmarks/regions are meaningful; body-text behavior decided & tested.
+
+---
+
+## Phase 9: User Story 6 - Mappings covered by runtime tests (Priority: P2, cross-cutting)
+
+**Goal**: Re-enable/replace the `[Ignore]`d a11y suite with active DOM-level assertions and add the axe gate (FR-016/017, SC-006). Finalized after the other stories land.
+
+### Implementation
+
+- [ ] T047 [US6] Re-enable or replace the `[Ignore]`d methods with active DOM-level asserts across `Given_AccessibleButton.cs`, `Given_AccessibleCheckBox.cs`, `Given_AccessibleComboBox.cs`, `Given_AccessibleSlider.cs`, `Given_AccessibleListView.cs`, `Given_AccessibleTextBox.cs` in `src/Uno.UI.RuntimeTests/Tests/Windows_UI_Xaml_Automation/` (FR-016/017)
+- [ ] T048 [P] [US6] Add an axe-core (or equivalent) scan gate over a page with all in-scope controls — zero "region must have a name" / focusability violations (SC-006), in `src/Uno.UI.RuntimeTests/...` 
+- [ ] T049 [US6] Confirm the full a11y suite runs (not `[Ignore]`d) on Skia WASM in CI
+
+**Checkpoint**: Coverage active; SC-003/SC-006 satisfied.
+
+---
+
+## Phase 10: Polish & Cross-Cutting Concerns
+
+- [ ] T050 [P] Native-WASM-DOM regression smoke: confirm the shared `FindHtmlRole` normalization (T022) and `PasswordBox` raise (T039) improve, not break, the native path
+- [ ] T051 [P] (Optional, out-of-scope) Remove the native blanket `tabindex="-1"` over-application + dead `hasOwnProperty` branch in `src/Uno.UI/ts/WindowManager.ts`
+- [ ] T052 Manual screen-reader pass (NVDA Windows, VoiceOver macOS) per `quickstart.md`
+- [ ] T053 [P] Update `research.md`/`spec.md` evidence labels from "code-review" to "runtime-validated" where tests now prove it
+- [ ] T054 Run `quickstart.md` validation end-to-end
+
+---
+
+## Dependencies & Execution Order
+
+### Phase dependencies
+
+- **Setup (P1)** → no deps.
+- **Foundational (P2)** → after Setup. T003 blocks all test tasks; T004 blocks US3/US4/US7 live-sync; T005 blocks US2/US7 path work.
+- **US1 (P3 phase)** → after Foundational. Independent (only T003 for its test).
+- **US2 (P4)** → after T005.
+- **US7 (P5)** → after T004 (live-sync subtasks) + T005 (generic parity).
+- **US4 (P6)**, **US3 (P7)** → after T004.
+- **US5 (P8)** → after Foundational; T044 pairs with US7 T028; T045 blocked on FR-015 decision.
+- **US6 (P9)** → after the stories whose `[Ignore]`d tests it re-enables (run last among functional work).
+- **Polish (P10)** → after all desired stories.
+
+### User-story independence
+
+- **US1, US2, US7-G1** are all P1 and largely independent — once Foundational is done they can proceed in parallel (different primary files, with T005 landed first).
+- **US4, US3** (P2) are independent of each other (different controls), both consume T004.
+- **US5** (P3) is independent; T044/T028 should be coordinated (same naming rule).
+
+### Within each story
+
+Tests first (must fail) → C#/TS implementation → run green. Validate shared-`Uno.UI` changes on Skia Desktop too (T007, T022, T039).
+
+### Parallel opportunities
+
+- Setup: T002 ∥ T001.
+- Foundational: T005 ∥ {T003, T004} (different files); T003/T004 both edit `WebAssemblyAccessibility.cs` so sequence them.
+- After Foundational: US1 ∥ US2 ∥ US7-G1 (staffed).
+- Within US7-G2: T026 ∥ T027 ∥ T029 ∥ T032 (different attributes/files); T028/T030/T031 touch `AriaMapper.cs`/`WebAssemblyAccessibility.cs` — sequence.
+
+---
+
+## Parallel Example: User Story 1
+
+```bash
+# Test first (must fail):
+Task: "T006 RadioButton DOM tests in Given_AccessibleCheckBox.cs"
+# Then implementation (T007/T008 touch different files → parallelizable):
+Task: "T007 initial radio checked in AriaMapper.cs"
+Task: "T008 pass checked into CreateRadioElement in SemanticElementFactory.cs"
+```
+
+---
+
+## Implementation Strategy
+
+### MVP first (US1 only)
+
+1. Phase 1 Setup → 2. Phase 2 Foundational (T003 at minimum) → 3. Phase 3 US1 → 4. **STOP & validate** RadioButton independently (Skia WASM + Desktop) → 5. ship.
+
+### Incremental delivery (recommended order, mirrors plan Phases A–G)
+
+US1 (RadioButton) → US2 (tabindex) → US7-G1 (ARIA wrong-target) → US4 (headings) → US3 (live-sync) → US7-G2 (ARIA completeness) → US5 (region + body text) → US6 (re-enable suite + axe). Each is an independently testable increment.
+
+### Parallel team strategy
+
+After Foundational: Dev A → US1, Dev B → US2, Dev C → US7-G1. Then redistribute P2/P3. Coordinate the three shared files (`AriaMapper.cs`, `WebAssemblyAccessibility.cs`, `SemanticElements.ts`) to avoid conflicts.
+
+---
+
+## Notes
+
+- `[P]` = different files, no incomplete-task dependency.
+- Tests are mandatory here (Constitution III) — verify red before green.
+- Shared `Uno.UI` changes (AriaMapper initial radio state, FindHtmlRole normalization, PasswordBox raise) affect all Skia hosts and — for role normalization — the native path; validate beyond WASM.
+- Several tasks depend on the open decisions at the top — resolve FR-007/FR-013/FR-015 before T015/T043/T045.
+- Commit per logical group with Conventional Commit messages.
