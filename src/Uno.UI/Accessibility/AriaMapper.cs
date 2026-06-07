@@ -389,6 +389,9 @@ public static class AriaMapper
 				var contentString = contentControl.Content switch
 				{
 					string s => s,
+					// FR-033: a direct TextBlock content names the control (its inner text is otherwise
+					// unreachable — the visual child-walk only sees the ContentPresenter).
+					TextBlock textBlockContent => textBlockContent.Text,
 					// Avoid calling ToString() on UIElement / complex objects
 					UIElement => null,
 					_ => contentControl.Content.ToString()
