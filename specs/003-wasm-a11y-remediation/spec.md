@@ -10,6 +10,10 @@ CheckBox→`<input type=checkbox>`), with correct fallbacks." — plus a follow-
 "a lot of Uno elements have `tabindex` when they shouldn't."
 **Depends On**: `001-wasm-accessibility`, `002-wasm-a11y-advanced`
 
+**Terminology**: "AOM" = the Skia-WASM **accessibility object model**, i.e. the parallel
+semantic DOM overlay (`#uno-semantics-root`). Used consistently throughout; "semantic DOM"
+and "semantic overlay" are synonyms for the same structure.
+
 ## Context
 
 A verification audit of the *existing* Skia-on-WebAssembly accessibility layer (see
@@ -86,9 +90,11 @@ the tab order, while interactive controls are. Fails before, passes after.
 When a control's state changes at runtime, the change is reflected in the semantic DOM so
 screen readers announce it.
 
-**Why this priority**: Several attributes are set once at creation and never updated —
-PasswordBox value, heading level, placeholder, `aria-required`, scrollability. Live apps
-mutate state constantly.
+**Why this priority**: Attributes are set once at creation and never updated. US3 owns the
+**PasswordBox value** and **TextBox placeholder** live-sync; the other live-sync properties
+are owned by their stories (heading `aria-level` → FR-011/US4; `aria-required`, landmark,
+etc. → FR-027/US7), all built on the shared FR-010 mechanism. Live apps mutate state
+constantly.
 
 **Independent Test**: For each affected property, change it in code after creation and
 assert the corresponding DOM attribute updates. Fails before, passes after.
@@ -97,10 +103,11 @@ assert the corresponding DOM attribute updates. Fails before, passes after.
 
 1. **Given** a `PasswordBox`, **When** `Password` is set in code, **Then** the DOM
    `<input type=password>` value reflects the change (masked).
-2. **Given** a heading, **When** `AutomationProperties.HeadingLevel` changes, **Then**
-   `aria-level` (and ideally the `<hN>` tag) updates.
-3. **Given** a `TextBox`, **When** `PlaceholderText` changes, **Then** the DOM placeholder
+2. **Given** a `TextBox`, **When** `PlaceholderText` changes, **Then** the DOM placeholder
    updates.
+
+*(Heading `aria-level` live-sync is validated under US4; `aria-required`/landmark live-sync
+under US7 — all exercise the same FR-010 mechanism.)*
 
 ---
 
@@ -172,7 +179,7 @@ assert real DOM state via `document.getElementById('uno-semantics-{handle}')`.
 
 ---
 
-### User Story 7 - ARIA attributes are correct, complete, and consistent across paths (Priority: P1)
+### User Story 7 - ARIA attributes are correct, complete, and consistent across paths (Priority: P1/P2)
 
 A screen-reader user gets correct roles, names, relationships, and states for every
 in-scope control — not a developer test-id read aloud as the name, not an invalid `role`
@@ -218,8 +225,8 @@ control with `AutomationId` + `LabeledBy` set. Fails before, passes after.
   re-creation is best-effort.
 - `IsTabStop=false` on an interactive control → not a tab stop even though it is the right
   element type.
-- ScrollViewer that becomes scrollable at runtime → region landmark appears/disappears, or
-  is documented as not-live if deferred.
+- ScrollViewer that becomes scrollable at runtime → region landmark is **not** re-evaluated
+  live (creation-time only, per the FR-013 decision); documented as a known limitation.
 - PasswordBox value set before AOM activation → reflected when AOM builds.
 - Disabled-at-creation div-composite → not tabbable from first render.
 - `LabeledBy`/`ControlledPeers` target is a structural element (Grid/Border) or pruned
@@ -256,36 +263,49 @@ control with `AutomationId` + `LabeledBy` set. Fails before, passes after.
 - **FR-006**: System MUST NOT assign `tabindex` to non-interactive elements (headings,
   `region`/landmarks, `group` containers, static text).
 - **FR-007**: System MUST present composite widgets (tablist, tree, menu, grid, listbox)
-  with a single tab stop using one consistent model (roving active-item OR
-  container + `aria-activedescendant`), applied identically across creation and the
-  virtualized fast-path.
+  with a single tab stop using the **roving active-item** model (**decided** — container is
+  `tabindex=-1`/none, the active item is the single `0`), applied identically across creation
+  and the virtualized fast-path. (Decision resolves prior open item; revisit only if a
+  control needs the `aria-activedescendant` model instead.)
 - **FR-008**: System MUST remove the tab stop from div/table-based composites when they are
   disabled, evaluated at creation and on change.
+- **FR-012**: System MUST drive roving `tabindex` from focus movement (not only
+  selection/toggle), and promote exactly one composite item at creation. *(A tabindex/roving
+  requirement — grouped here rather than under Heading levels; ID retained for traceability.)*
 
-**Live state-sync (P2)**
-- **FR-009**: System MUST update DOM attributes when the corresponding automation property
-  changes at runtime for: PasswordBox value, heading `aria-level`, TextBox placeholder,
-  `aria-required`, and ScrollViewer scrollability/region.
-- **FR-010**: System SHOULD generalize the property→attribute update mechanism so new
-  properties do not silently become creation-only (addressing the hand-maintained switch).
+**Live state-sync (P2)** — *single ownership per attribute to avoid overlap; FR-009, FR-011,
+and FR-027 together constitute the live-sync coverage:*
+- **FR-009**: System MUST live-update the DOM for the **US3-owned** properties:
+  **PasswordBox value** and **TextBox placeholder**. (Heading `aria-level` is owned by
+  FR-011; `aria-required` and the remaining attributes by FR-027; ScrollViewer region is
+  creation-time per FR-013, not a live property here.)
+- **FR-010**: System MUST generalize the property→attribute update mechanism (chain the WASM
+  `NotifyPropertyChangedEventCore` override to base, or a property→attribute map) so new
+  properties do not silently become creation-only. This is the shared substrate FR-009/011/027
+  build on.
 
 **Heading levels (P2)**
 - **FR-011**: System MUST preserve WinUI heading levels 7–9 in `aria-level` (clamping only
-  the `<hN>` tag to `<h6>`).
-- **FR-012**: System MUST drive roving `tabindex` from focus movement (not only
-  selection/toggle), and promote exactly one composite item at creation.
+  the `<hN>` tag to `<h6>`), and MUST live-update `aria-level` on `HeadingLevel` change
+  (heading live-sync is owned here, not by FR-027).
 
 **ScrollViewer / body text (P3)**
 - **FR-013**: System MUST emit `role=region` for a ScrollViewer ONLY when it is actually
-  scrollable AND has an accessible name; otherwise it MUST NOT be a landmark.
+  scrollable AND has an accessible name; otherwise it MUST NOT be a landmark. **Decided**:
+  this is evaluated at element creation; live scrollability-transition re-evaluation is
+  **deferred** (out of scope for this iteration — see Assumptions).
 - **FR-014**: Every landmark/`region` (ScrollViewer→region, `AutomationLandmarkType`
   landmarks, named groups) MUST have a meaningful accessible name (never a concatenated
   descendant-text dump); a landmark/region MUST NOT be emitted unlabeled, and
   `aria-roledescription` MUST NOT be emitted on an element that has no accessible name
   (per ARIA, roledescription is not a substitute for a name).
-- **FR-015**: System MUST expose standalone body `TextBlock` text to AT per the chosen
-  design (see research §6 — body-text decision), without reintroducing the pruning's
-  DOM-bloat/nested-focusable problems.
+- **FR-015**: **Decided** — System MUST emit a non-interactive text element (`<p>` for
+  block `TextBlock`, `<span>` for inline) for a **standalone** body `TextBlock` whose text is
+  **not** already absorbed by a parent control's accessible name. Inner/label `TextBlock`s
+  that a parent absorbs via `ResolveLabel` remain pruned (no element), preserving the
+  DOM-bloat / nested-focusable mitigation. The emitted text element carries no `tabindex` and
+  no interactive role. *(Revisit if profiling shows DOM-bloat regressions; this is the
+  decision most worth reconfirming with the product owner.)*
 
 **Testing (P2)**
 - **FR-016**: System MUST add runtime tests that enable the AOM and assert, per mapping:
@@ -325,8 +345,9 @@ control with `AutomationId` + `LabeledBy` set. Fails before, passes after.
 - **FR-026**: System MUST map `aria-level` from `AutomationProperties.Level` (distinct from
   `HeadingLevel`) for hierarchical items such as `TreeViewItem`.
 - **FR-027**: System MUST add live-sync for the currently creation-only/dead attributes
-  (`FullDescription`, `IsRequiredForForm`, `HeadingLevel`, `IsDialog`/`aria-modal`,
-  `LiveSetting`, `AcceleratorKey`/`AccessKey`, **`LandmarkType`/`LocalizedLandmarkType`**) —
+  (`FullDescription`, `IsRequiredForForm`, `IsDialog`/`aria-modal`,
+  `LiveSetting`, `AcceleratorKey`/`AccessKey`, **`LandmarkType`/`LocalizedLandmarkType`**;
+  heading `aria-level` is owned by FR-011, not duplicated here) —
   including chaining the WASM `NotifyPropertyChangedEventCore` override to base or a
   generalized property→attribute map (ties to FR-010) — and MUST preserve
   `FullDescription` > `HelpText` precedence on update. NOTE: several of these attached
@@ -336,9 +357,13 @@ control with `AutomationId` + `LabeledBy` set. Fails before, passes after.
 - **FR-028**: System MUST correct value semantics: do not inject `posinset` "N of M" text
   into `aria-label` for roles that don't support it; drive `aria-haspopup` from the C#
   value (not TS hardcoding); map `AccessKey` to the HTML `accesskey` attribute rather than
-  conflating it into `aria-keyshortcuts`; revisit the hardcoded `aria-atomic=true`.
-- **FR-029**: System SHOULD close remaining completeness gaps where a source exists:
-  `aria-busy` (`ItemStatus`), `lang` (`Culture`), `aria-owns`/`aria-current`/`aria-details`.
+  conflating it into `aria-keyshortcuts`; and **stop forcing `aria-atomic=true`** on every
+  live region — omit it (browser default) unless a specific region's WinUI semantics require
+  atomic announcement.
+- **FR-029**: System SHOULD map the completeness gaps that have a concrete WinUI source:
+  `aria-busy` (from `ItemStatus`) and `lang` (from `Culture`). `aria-owns`/`aria-current`/
+  `aria-details` have **no current source** and are explicitly out of scope unless a source
+  property is introduced.
 - **FR-030**: System MUST add runtime tests asserting emitted ARIA output (roles, names,
   relationships, states) against the live DOM, including a generic-path control and an
   `AutomationId`+`LabeledBy` case (extends FR-016).
@@ -371,7 +396,8 @@ control with `AutomationId` + `LabeledBy` set. Fails before, passes after.
 - **SC-003**: For every mapping in scope, a runtime test asserts the produced element type
   and ARIA attributes against the live DOM (no `[Ignore]`).
 - **SC-004**: Runtime state changes (password value, heading level, placeholder,
-  scrollability) are reflected in the DOM within one update cycle, verified by tests.
+  `aria-required`, landmark) are reflected in the DOM within one update cycle, verified by
+  tests. (ScrollViewer scrollability transitions are excluded — creation-time only per FR-013.)
 - **SC-005**: Heading levels 1–9 are preserved in `aria-level`.
 - **SC-006**: axe-core (or equivalent) reports no "region must have an accessible name"
   and no "interactive controls must be focusable / non-interactive must not be" violations
@@ -394,6 +420,14 @@ control with `AutomationId` + `LabeledBy` set. Fails before, passes after.
   helper used by the 2 active TextBox tests.
 - WinUI C++ sources may be consulted for radio/heading/region semantics (Constitution VII).
 - NVDA (Windows) and VoiceOver (macOS) remain the manual-verification screen readers.
+- **Backward compatibility (Constitution VI)**: several fixes change observable a11y output
+  (AutomationId no longer in `aria-label`, normalized `role` tokens, headings/containers
+  leaving the tab order, dropped `aria-atomic`). These are bug-fixes, not public-API breaks
+  (no `fix!`/`feat!`), but MUST be captured in release notes / changelog so downstream apps
+  that scraped the old output are forewarned.
+- **Deferred (this iteration)**: live re-evaluation of ScrollViewer scrollability (FR-013 is
+  creation-time); `aria-owns`/`aria-current`/`aria-details` (no source); native WASM-DOM
+  `tabindex`-noise cleanup (optional).
 
 ## Out of Scope
 

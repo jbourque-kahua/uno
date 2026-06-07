@@ -9,10 +9,11 @@
 Remediate defects found by auditing the existing Skia-on-WebAssembly accessibility layer:
 fix the **broken** RadioButton mapping, gate **tabindex** on real focusability so
 non-interactive elements (headings, composite containers) leave the tab order, close
-**live-sync** gaps (PasswordBox value, heading level, placeholder, scrollability), correct
-**heading level 7–9** handling, make **ScrollViewer** regions meaningful, decide **body
-text** exposure, and establish **DOM-level runtime tests** (the current suite is almost
-entirely `[Ignore]`d). Target is the Skia WASM AOM; the native WASM-DOM target is
+**live-sync** gaps (PasswordBox value, placeholder, `aria-required`, landmark — each owned by
+a single FR; ScrollViewer scrollability is creation-time/deferred), correct
+**heading level 7–9** handling (incl. its own live-sync), make **ScrollViewer** regions
+meaningful, expose standalone **body text**, and establish **DOM-level runtime tests** (the
+current suite is almost entirely `[Ignore]`d). Target is the Skia WASM AOM; the native WASM-DOM target is
 maintenance-only.
 
 ## Technical Context
@@ -36,16 +37,18 @@ native targets; TypeScript compiles to an embedded resource
 **Scale/Scope**: 6 mappings + cross-cutting tabindex, live-sync, and ARIA-attribute
 correctness (30 FRs); ~7 C# files, 2 TS files, ~9 runtime-test classes
 
-### NEEDS CLARIFICATION (resolve before/within Phase 1)
+### Resolved decisions (were NEEDS CLARIFICATION)
 
-- **Body-text exposure** (FR-015): keep pruning + parent-absorb only, OR additionally emit
-  a `<p>`/`<span>` for standalone text. Recommendation: gated standalone emission. *Owner
-  decision.*
-- **ScrollViewer region liveness** (FR-013): is runtime scrollability-transition sync
-  required, or is creation-time gating sufficient for v1? Recommendation: creation-time
-  gate now, live-transition deferred.
-- **Composite tabindex model** (FR-007): roving active-item vs. container +
-  activedescendant. Recommendation: roving (matches existing item roving + DOM `.focus()`).
+- **Composite tabindex model** (FR-007): **RESOLVED → roving active-item** (container
+  `tabindex=-1`/none; the active item is the single `0`). Matches the existing item roving +
+  DOM `.focus()`. Unblocks the US2 composite tasks.
+- **ScrollViewer region liveness** (FR-013): **RESOLVED → creation-time gating only**; live
+  scrollability-transition re-evaluation is deferred (documented limitation). Removes the
+  live-scrollability clause from FR-009.
+- **Body-text exposure** (FR-015): **RESOLVED → gated standalone emission** — emit `<p>`/
+  `<span>` only for standalone body `TextBlock`s not absorbed by a parent name; keep pruning
+  for inner/label text. Unblocks US5. *(Lowest-confidence decision — flagged for product
+  reconfirmation; revisit if profiling shows DOM-bloat.)*
 
 ## Constitution Check
 
@@ -100,7 +103,7 @@ src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/
 └── FocusSynchronizer.cs                  # Drive roving tabindex on focus movement (MODIFY)
 
 src/Uno.UI.Runtime.Skia.WebAssembly.Browser/ts/Runtime/
-├── SemanticElements.ts                   # Honor isFocusable; remove heading tabIndex; container/composite tabindex model; radio checked; aria-orientation; live-update fns (MODIFY)
+├── SemanticElements.ts                   # Honor isFocusable; remove heading tabIndex; roving composite model; radio checked; aria-orientation; standalone-text <p>/<span>; virtualized-item ARIA parity; live-update fns (MODIFY)
 └── Accessibility.ts                      # updateElementFocusability reuse; generic-path parity; aria-labelledby; AutomationId→data-* not aria-label; IDREF validation (MODIFY)
 
 src/Uno.UI/UI/Xaml/Controls/PasswordBox/
@@ -129,18 +132,19 @@ Ordered by severity and independent testability (each phase is shippable):
    DOM activation → select; external-change → native `checked`; radio roving at creation.
    Tests: `Given_AccessibleCheckBox` radio cases (active, DOM-level). *Highest impact,
    self-contained.*
-2. **Phase B — tabindex gating (P1).** FR-005..008. Thread `isFocusable` through the
-   factory; remove heading `tabIndex`; one consistent composite model; disabled-composite
-   detabbing. Tests: `Given_AccessibleTabindex` (NEW) + heading/listbox/tab/menu.
-3. **Phase C — heading correctness (P2).** FR-011..012 + heading live-sync (part of FR-009).
-   Level 7–9 passthrough; `aria-level` live update; roving driven by focus. Tests:
-   `Given_AccessibleHeading` (NEW).
-4. **Phase D — live-sync gaps (P2).** FR-009..010. PasswordBox value raise + branch;
-   placeholder; `aria-required`. Consider a generalized property→attribute map. Tests:
-   extend `Given_AccessibleTextBox`.
-5. **Phase E — ScrollViewer region + body text (P3).** FR-013..015. Gate region on
-   scrollable+named; meaningful label; body-text decision. Tests: `Given_AccessibleScrollViewer`
-   (NEW). *Blocked on the two open decisions.*
+2. **Phase B — tabindex gating (P1).** FR-005..008, **FR-012**. Thread `isFocusable` through
+   the factory; remove heading `tabIndex`; the **roving** composite model (FR-007 decided);
+   drive roving from focus movement (FR-012); disabled-composite detabbing. Tests:
+   `Given_AccessibleTabindex` (NEW) + heading/listbox/tab/menu.
+3. **Phase C — heading correctness (P2).** FR-011. Level 7–9 passthrough + `aria-level`
+   live-update (heading live-sync owned here, not FR-027). Tests: `Given_AccessibleHeading`
+   (NEW). (Roving-from-focus moved to Phase B / FR-012.)
+4. **Phase D — live-sync gaps (P2).** FR-009 (PasswordBox value, TextBox placeholder) + FR-010
+   (the generalized property→attribute substrate that US3/US4/US7 build on). `aria-required`
+   now lives in G2/FR-027. Tests: extend `Given_AccessibleTextBox`.
+5. **Phase E — ScrollViewer region + body text (P3).** FR-013..015 — **decisions resolved**:
+   region gated on scrollable+named (creation-time; live transition deferred); body-text via
+   **gated standalone `<p>`/`<span>`** emission. Tests: `Given_AccessibleScrollViewer` (NEW).
 6. **Phase F — test re-enablement + axe pass (P2, cross-cutting).** FR-016..017. Re-enable
    the `[Ignore]`d suite; add the axe/landmark checks for SC-006.
 7. **Phase G — ARIA attribute correctness & path parity (P1 for wrong-target/role; P2 for
@@ -148,7 +152,9 @@ Ordered by severity and independent testability (each phase is shippable):
    - **G1 (P1):** stop sourcing `aria-label` from `AutomationId` (FR-018); emit
      `aria-labelledby` from `LabeledBy` (FR-019); normalize `FindHtmlRole` to valid ARIA
      roles (FR-020, shared C# — validate native path too); factory↔generic attribute parity
-     (FR-021); dangling-IDREF integrity (FR-022). Tests: `Given_AccessibleAria` (NEW).
+     (FR-021); **virtualized-item ARIA parity** (ListView/ItemsRepeater items bypass the
+     factory — thread the full attribute set through the virtualized fast-path, research §5/§8.2);
+     dangling-IDREF integrity (FR-022). Tests: `Given_AccessibleAria` (NEW).
    - **G2 (P2):** `aria-invalid` (FR-023), `aria-orientation` (FR-024),
      `aria-roledescription` from `LocalizedControlType` **and** `LocalizedLandmarkType` on
      all landmark types (FR-025), landmark/region-must-have-a-name + no-roledescription-

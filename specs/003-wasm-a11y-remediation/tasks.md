@@ -20,11 +20,11 @@ independently shippable increment (mirrors plan.md Phases A–G).
 - **[Story]**: US1–US7 (user-story phases only)
 - All paths are repo-relative.
 
-## ⚠️ Open decisions that gate some tasks (resolve before the marked tasks)
+## ✅ Resolved decisions (previously open)
 
-- **FR-015 body text** (US5): emit `<p>`/`<span>` for standalone text vs. keep pruning — *owner decision*.
-- **FR-007 composite tabindex model** (US2): roving active-item vs. container+`aria-activedescendant` — plan recommends **roving**; T0-marked tasks assume roving unless changed.
-- **FR-013 region liveness** (US5): creation-time gating now vs. live scrollability transitions — plan recommends creation-time now.
+- **FR-007 composite tabindex model** → **roving active-item** (container `-1`/none; active item `0`). T015/T016 implement this.
+- **FR-013 region liveness** → **creation-time gating only**; live scrollability-transition deferred. T043 implements creation-time; no live-transition task.
+- **FR-015 body text** → **gated standalone `<p>`/`<span>` emission** (standalone TextBlocks not absorbed by a parent name; keep pruning for inner/label text). T045 implements this. *(Lowest-confidence — reconfirm with product owner if DOM-bloat surfaces.)*
 
 ---
 
@@ -111,7 +111,8 @@ independently shippable increment (mirrors plan.md Phases A–G).
 - [ ] T022 [US7] Normalize `FindHtmlRole` UIA tokens → valid ARIA (`image`→`img`, `edit`→`textbox`, drop `pane`/`window`/`custom`/…) and reconcile `ToggleSwitch`→`switch`, in `src/Uno.UI/UI/Xaml/Automation/AutomationProperties.uno.cs` (FR-020; shared C# — validate the native path too)
 - [ ] T023 [US7] Apply the full `GetAriaAttributes` set on the generic `AddSemanticElement` path (describedby/controls/flowto/required/description/posinset/setsize/selected/valuenow/modal+`role=dialog`) in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs` (FR-021; consumes T005)
 - [ ] T024 [US7] IDREF integrity: emit relationship ids only when `HasSemanticElement(handle)`, clear on remove/deselect, with defensive `getElementById` guards, in `SemanticElementFactory.cs` + `WebAssemblyAccessibility.cs` + `Accessibility.ts` (FR-022)
-- [ ] T025 [US7] Run the G1 subset of T019 → green
+- [ ] T055 [US7] Virtualized-item ARIA parity: thread the full attribute set (roles, name, posinset/setsize, state) through the virtualized fast-path (`addVirtualizedItem`/`registerVirtualizedContainer`) so ListView/ItemsRepeater items don't bypass the factory's attribute application, in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/ts/Runtime/SemanticElements.ts` + `Accessibility/WebAssemblyAccessibility.cs` (G1; research §5/§8.2) *(added during /speckit-analyze remediation)*
+- [ ] T025 [US7] Run the G1 subset of T019 → green (incl. T055 virtualized parity)
 
 ### Implementation — G2 (P2)
 
@@ -120,8 +121,8 @@ independently shippable increment (mirrors plan.md Phases A–G).
 - [ ] T028 [US7] Source `aria-roledescription` from `LocalizedControlType` AND `LocalizedLandmarkType` on **all** landmark types, gated on an accessible name, in `src/Uno.UI/Accessibility/AriaMapper.cs` + `WebAssemblyAccessibility.cs` (FR-025; pairs with US5 T041)
 - [ ] T029 [P] [US7] Map `aria-level` from `AutomationProperties.Level` (distinct from `HeadingLevel`) in `src/Uno.UI/Accessibility/AriaMapper.cs` (FR-026)
 - [ ] T030 [US7] Add live-sync branches + wire the missing changed-callbacks/raises for `LandmarkType`/`LocalizedLandmarkType`/`FullDescription`/`IsRequiredForForm`/`IsDialog`/`LiveSetting`/`AcceleratorKey`/`AccessKey`, in `src/Uno.UI/UI/Xaml/Automation/AutomationProperties.cs` + `WebAssemblyAccessibility.cs`; preserve `FullDescription`>`HelpText` precedence (FR-027; consumes T004)
-- [ ] T031 [US7] Value-semantics: `aria-haspopup` from the C# value; `AccessKey`→HTML `accesskey`; stop injecting posinset "N of M" into `aria-label`; revisit hardcoded `aria-atomic`, in `src/Uno.UI/Accessibility/AriaMapper.cs` + `SemanticElements.ts`/`Accessibility.ts` (FR-028)
-- [ ] T032 [P] [US7] Completeness gaps where a source exists: `aria-busy`(`ItemStatus`), `lang`(`Culture`), `aria-owns`/`current`/`details`, in `src/Uno.UI/Accessibility/AriaMapper.cs` + appliers (FR-029)
+- [ ] T031 [US7] Value-semantics: `aria-haspopup` from the C# value; `AccessKey`→HTML `accesskey`; stop injecting posinset "N of M" into `aria-label`; **stop forcing `aria-atomic=true`** (omit unless a region's WinUI semantics require it), in `src/Uno.UI/Accessibility/AriaMapper.cs` + `SemanticElements.ts`/`Accessibility.ts` (FR-028)
+- [ ] T032 [P] [US7] Completeness gaps that have a concrete source: `aria-busy`(`ItemStatus`), `lang`(`Culture`), in `src/Uno.UI/Accessibility/AriaMapper.cs` + appliers (FR-029). `aria-owns`/`aria-current`/`aria-details` are **out of scope** (no source) per FR-029.
 - [ ] T033 [US7] Run all of T019 → green
 
 **Checkpoint**: ARIA output is correct, complete, and path-consistent.
@@ -150,18 +151,18 @@ independently shippable increment (mirrors plan.md Phases A–G).
 
 ## Phase 7: User Story 3 - Dynamic state changes reach AT (Priority: P2)
 
-**Goal**: PasswordBox value, placeholder, and `aria-required` reflect runtime changes (FR-009). *Depends on T004.*
+**Goal**: PasswordBox value and TextBox placeholder reflect runtime changes (FR-009). *Depends on T004.* (`aria-required` live-sync is owned by US7/T030/FR-027; heading `aria-level` by US4/T036/FR-011 — not here.)
 
 **Independent Test**: Change each property in code after creation; assert the DOM attribute updates.
 
 ### Tests (write first, must FAIL)
 
-- [ ] T038 [P] [US3] Failing tests in `src/Uno.UI.RuntimeTests/Tests/Windows_UI_Xaml_Automation/Given_AccessibleTextBox.cs`: programmatic `PasswordBox.Password` live-syncs (masked); runtime `PlaceholderText` change; runtime `aria-required` change (uses T003)
+- [ ] T038 [P] [US3] Failing tests in `src/Uno.UI.RuntimeTests/Tests/Windows_UI_Xaml_Automation/Given_AccessibleTextBox.cs`: programmatic `PasswordBox.Password` live-syncs (masked); runtime `PlaceholderText` change (uses T003). (`aria-required` live-sync is tested under US7/T030, not here.)
 
 ### Implementation
 
 - [ ] T039 [US3] Raise a value automation event for `PasswordBox` (masked) so the existing `Value` sync path fires — fix the `peer is TextBoxAutomationPeer` gate, in `src/Uno.UI/UI/Xaml/Controls/PasswordBox/PasswordBox.cs` + `PasswordBoxAutomationPeer.cs` (and `TextBox.cs:361` guard) (FR-009; consult WinUI per Constitution VII; shared-code watch-item)
-- [ ] T040 [US3] Add `PlaceholderText` and `IsRequiredForForm` live-sync branches in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs` (FR-009; consumes T004; pairs with T030)
+- [ ] T040 [US3] Add the `PlaceholderText` live-sync branch in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs` (FR-009; consumes T004). NOTE: `aria-required`/`IsRequiredForForm` live-sync is owned by **T030** (FR-027), not duplicated here — coordinate on the same file.
 - [ ] T041 [US3] Run T038 → green
 
 **Checkpoint**: Runtime state changes reach AT.
@@ -170,7 +171,7 @@ independently shippable increment (mirrors plan.md Phases A–G).
 
 ## Phase 8: User Story 5 - Scrollable regions meaningful; static text reachable (Priority: P3)
 
-**Goal**: `role=region` only for scrollable + named ScrollViewers; meaningful `aria-label`; the body-text decision implemented (FR-013–015). *FR-015 blocked on owner decision.*
+**Goal**: `role=region` only for scrollable + named ScrollViewers; meaningful `aria-label`; standalone body text emitted as gated `<p>`/`<span>` (FR-013–015). *Decisions resolved: region creation-time gating; body-text gated standalone emission.*
 
 **Independent Test**: Non-scrollable ScrollViewer → no region; scrollable+named → labeled region; unlabeled landmark not emitted; standalone body text exposed per chosen design.
 
@@ -182,7 +183,7 @@ independently shippable increment (mirrors plan.md Phases A–G).
 
 - [ ] T043 [US5] Gate `role=region` on actual scrollability (`IScrollProvider`) AND a real accessible name (`ResolveLabel`, not raw `GetName()`), in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs` + `src/Uno.UI/Accessibility/AriaMapper.cs` (FR-013)
 - [ ] T044 [US5] Enforce "every landmark/region MUST have a name; never emit `aria-roledescription` without one" in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs` (FR-014; pairs with US7 T028)
-- [ ] T045 [US5] **[BLOCKED on FR-015 decision]** Implement the body-text approach — gated standalone `<p>`/`<span>` emission OR documented keep-pruning — in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs` `IsSemanticElement` (+ factory if emitting) (FR-015)
+- [ ] T045 [US5] Emit a non-interactive `<p>` (block) / `<span>` (inline) text element for a **standalone** body `TextBlock` not absorbed by a parent name; keep pruning for inner/label text; no `tabindex`/interactive role on it — in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs` `IsSemanticElement` + `SemanticElementFactory.cs`/`SemanticElements.ts` (FR-015; decision resolved)
 - [ ] T046 [US5] Run T042 → green
 
 **Checkpoint**: Landmarks/regions are meaningful; body-text behavior decided & tested.
@@ -210,6 +211,7 @@ independently shippable increment (mirrors plan.md Phases A–G).
 - [ ] T052 Manual screen-reader pass (NVDA Windows, VoiceOver macOS) per `quickstart.md`
 - [ ] T053 [P] Update `research.md`/`spec.md` evidence labels from "code-review" to "runtime-validated" where tests now prove it
 - [ ] T054 Run `quickstart.md` validation end-to-end
+- [ ] T056 [P] Add a release-note / changelog entry for the observable a11y output changes (AutomationId out of `aria-label`, normalized `role` tokens, headings/containers leaving the tab order, dropped `aria-atomic`) — bug-fixes, not API breaks, but downstream-visible (Constitution VI; spec Assumptions) *(added during /speckit-analyze remediation)*
 
 ---
 
@@ -223,7 +225,7 @@ independently shippable increment (mirrors plan.md Phases A–G).
 - **US2 (P4)** → after T005.
 - **US7 (P5)** → after T004 (live-sync subtasks) + T005 (generic parity).
 - **US4 (P6)**, **US3 (P7)** → after T004.
-- **US5 (P8)** → after Foundational; T044 pairs with US7 T028; T045 blocked on FR-015 decision.
+- **US5 (P8)** → after Foundational; T044 pairs with US7 T028; T045 unblocked (FR-015 resolved → gated standalone emission).
 - **US6 (P9)** → after the stories whose `[Ignore]`d tests it re-enables (run last among functional work).
 - **Polish (P10)** → after all desired stories.
 
@@ -279,5 +281,6 @@ After Foundational: Dev A → US1, Dev B → US2, Dev C → US7-G1. Then redistr
 - `[P]` = different files, no incomplete-task dependency.
 - Tests are mandatory here (Constitution III) — verify red before green.
 - Shared `Uno.UI` changes (AriaMapper initial radio state, FindHtmlRole normalization, PasswordBox raise) affect all Skia hosts and — for role normalization — the native path; validate beyond WASM.
-- Several tasks depend on the open decisions at the top — resolve FR-007/FR-013/FR-015 before T015/T043/T045.
+- The three previously-open decisions (FR-007/FR-013/FR-015) are now **resolved** (see the top of this file); no task is blocked. FR-015's gated-standalone-emission decision is the lowest-confidence — reconfirm with the product owner if DOM-bloat surfaces.
+- Total tasks: 56 (T001–T056; T055/T056 added during /speckit-analyze remediation — IDs are non-contiguous in-phase by design to preserve existing references).
 - Commit per logical group with Conventional Commit messages.
