@@ -512,6 +512,17 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 	/// </summary>
 	private void EmitRealizedItem(VirtualizedSemanticRegion region, IntPtr containerHandle, UIElement itemElement, int index, int totalCount, string role)
 	{
+		// FR-031: a realized container may be a decorative/non-semantic element rather than a real
+		// destination — e.g. NavigationView hosts NavigationViewItemSeparator and
+		// NavigationViewItemHeader (both AccessibilityView=Raw) in the same menu ItemsRepeater as its
+		// NavigationViewItems. Emitting those as role="option" exposes decorative clutter to AT
+		// (A11y Inspector WARN). Skip anything IsSemanticElement prunes (Raw short-circuit, structural,
+		// absorbed TextBlock), matching the membership rule the rest of the AOM walk already enforces.
+		if (!IsSemanticElement(itemElement))
+		{
+			return;
+		}
+
 		var label = itemElement.GetOrCreateAutomationPeer()?.GetName() ?? string.Empty;
 		var offset = GetOffsetRelativeToSemanticParent(itemElement, containerHandle);
 		region.OnItemRealized(

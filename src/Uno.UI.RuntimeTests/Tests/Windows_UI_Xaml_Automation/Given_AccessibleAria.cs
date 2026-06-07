@@ -256,6 +256,43 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Automation
 			Assert.IsFalse(SemanticElementExists(hidden), "A Collapsed Button must NOT emit a semantic node (FR-032/T058).");
 		}
 
+		/// <summary>
+		/// T057 follow-up (FR-031, WASM): the virtualized backfill/handlers must NOT emit decorative
+		/// AccessibilityView=Raw repeater children. A NavigationViewItemSeparator realized in the menu
+		/// ItemsRepeater must produce NO semantic node, while a real item still does. Guards the
+		/// IsSemanticElement gate added to EmitRealizedItem. Fails before the gate, passes after.
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		[PlatformCondition(ConditionMode.Include, RuntimeTestPlatforms.SkiaWasm)]
+		public async Task When_NavigationView_Has_Raw_Separator_Then_It_Is_Not_Emitted()
+		{
+			var item = new NavigationViewItem { Content = "Home" };
+			var separator = new NavigationViewItemSeparator();
+			var nav = new NavigationView
+			{
+				PaneDisplayMode = NavigationViewPaneDisplayMode.Left,
+				IsPaneOpen = true,
+				IsSettingsVisible = false,
+				IsBackButtonVisible = NavigationViewBackButtonVisible.Collapsed,
+				Width = 400,
+				Height = 400,
+			};
+			nav.MenuItems.Add(item);
+			nav.MenuItems.Add(separator);
+
+			await UITestHelper.Load(nav);
+			await UITestHelper.WaitForIdle();
+
+			EnableAccessibilityThroughDom();
+			await UITestHelper.WaitFor(() => SemanticElementExists(item), timeoutMS: 5000,
+				message: "Timed out waiting for the NavigationView item semantic node.");
+			await UITestHelper.WaitForIdle();
+
+			Assert.IsTrue(SemanticElementExists(item), "A real NavigationView item must emit a semantic node.");
+			Assert.IsFalse(SemanticElementExists(separator), "A decorative NavigationViewItemSeparator (AccessibilityView=Raw) must NOT be emitted as a semantic node (FR-031).");
+		}
+
 		private static void EnableAccessibilityThroughDom()
 		{
 			InvokeBrowserJs("(function(){const button = document.getElementById('uno-enable-accessibility'); if (button) { button.click(); } return 'ok';})()");
