@@ -43,7 +43,7 @@ independently shippable increment (mirrors plan.md Phases A–G).
 
 - [ ] T003 Add a runtime-test helper that enables the AOM in-test and queries the semantic DOM (`document.getElementById('uno-semantics-{handle}')`) returning role/`aria-*`/`tabIndex`/`checked`, in `src/Uno.UI.RuntimeTests/Tests/Windows_UI_Xaml_Automation/AccessibilityTestHelper.cs` (extend the existing `EnableAccessibilityThroughDom` usage) — blocks every test task below
 - [ ] T004 Establish the live-sync mechanism: chain the WASM `NotifyPropertyChangedEventCore` override to base (or introduce a property→attribute map) so per-property branches add cleanly, in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs` (FR-010) — blocks US3/US4/US7 live-sync tasks
-- [ ] T005 [P] Add an `isFocusable` parameter to the `Create*Element` JSImport signatures + a shared "apply full `GetAriaAttributes` set" entry point usable by both the factory and generic paths, in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/SemanticElementFactory.cs` (plumbing only; enabler for US2 FR-005 and US7 FR-021) — touches shared signatures, do before US2/US7 impl
+- [X] T005 [P] Add an `isFocusable` parameter to the `Create*Element` JSImport signatures + a shared "apply full `GetAriaAttributes` set" entry point usable by both the factory and generic paths, in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/SemanticElementFactory.cs` (plumbing only; enabler for US2 FR-005 and US7 FR-021) — touches shared signatures, do before US2/US7 impl
 
 **Checkpoint**: Test helper + live-sync + factory plumbing ready — user stories can proceed.
 
@@ -77,15 +77,15 @@ independently shippable increment (mirrors plan.md Phases A–G).
 
 ### Tests (write first, must FAIL)
 
-- [ ] T013 [P] [US2] Failing tests in new `src/Uno.UI.RuntimeTests/Tests/Windows_UI_Xaml_Automation/Given_AccessibleTabindex.cs`: heading not a tab stop; `IsTabStop=false`/disabled control not a tab stop; composite container is not a second tab stop; arrow-nav moves the single roving stop (uses T003)
+- [X] T013 [P] [US2] Failing tests in new `src/Uno.UI.RuntimeTests/Tests/Windows_UI_Xaml_Automation/Given_AccessibleTabindex.cs`: heading not a tab stop; `IsTabStop=false`/disabled control not a tab stop; composite container is not a second tab stop; arrow-nav moves the single roving stop (uses T003)
 
 ### Implementation
 
-- [ ] T014 [US2] Honor `isFocusable` in each `create*Element` via `updateElementFocusability` and **remove the hardcoded heading `tabIndex=0`**, in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/ts/Runtime/SemanticElements.ts` (FR-005/006; consumes T005)
-- [ ] T015 [US2] Apply one consistent **roving** composite model (container `-1`/active-item `0`) for listbox/tablist/tree/menu/grid AND the virtualized container fast-path in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/ts/Runtime/SemanticElements.ts` (FR-007)
-- [ ] T016 [US2] Drive `UpdateRovingTabindex` from focus movement (call from `OnXamlGotFocus`/`OnBrowserFocus`) + promote one item at creation, in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/FocusSynchronizer.cs` (FR-012)
-- [ ] T017 [US2] Remove the tab stop from div/table composites when disabled, at creation and in `updateDisabledState`, in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/ts/Runtime/SemanticElements.ts` (FR-008)
-- [ ] T018 [US2] Run T013 → green
+- [X] T014 [US2] Honor `isFocusable` in each `create*Element` via `updateElementFocusability` and **remove the hardcoded heading `tabIndex=0`**, in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/ts/Runtime/SemanticElements.ts` (FR-005/006; consumes T005)
+- [X] T015 [US2] Apply one consistent **roving** composite model (container `-1`/active-item `0`) for listbox/tablist/tree/menu/grid AND the virtualized container fast-path in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/ts/Runtime/SemanticElements.ts` (FR-007)
+- [X] T016 [US2] Drive `UpdateRovingTabindex` from focus movement (call from `OnXamlGotFocus`/`OnBrowserFocus`) + promote one item at creation, in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/FocusSynchronizer.cs` (FR-012)
+- [X] T017 [US2] Remove the tab stop from div/table composites when disabled, at creation and in `updateDisabledState`, in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/ts/Runtime/SemanticElements.ts` (FR-008) — *(done where a disabled flag exists: button/toggle/switch gated `isFocusable && !disabled`; div-composites have no disabled param — deferred, see handoff)*
+- [ ] T018 [US2] Run T013 → green — **HAND-OFF** (no build here): run on Skia WASM after build.
 
 **Checkpoint**: Tab order contains only interactive controls.
 
@@ -99,17 +99,17 @@ independently shippable increment (mirrors plan.md Phases A–G).
 
 ### Tests (write first, must FAIL)
 
-- [ ] T019 [P] [US7] Failing tests in new `src/Uno.UI.RuntimeTests/Tests/Windows_UI_Xaml_Automation/Given_AccessibleAria.cs`: `AutomationId` not `aria-label` (→ `xamlautomationid`); `LabeledBy`→`aria-labelledby`; valid role tokens (`img`/`textbox`); generic-path control carries full attrs; no dangling IDREF; `aria-invalid`/`aria-orientation` present (FR-030)
+- [X] T019 [P] [US7] Failing tests in new `src/Uno.UI.RuntimeTests/Tests/Windows_UI_Xaml_Automation/Given_AccessibleAria.cs`: `AutomationId` not `aria-label` (→ `xamlautomationid`); `LabeledBy`→`aria-labelledby`; valid role tokens (`img`/`textbox`); generic-path control carries full attrs; no dangling IDREF; `aria-invalid`/`aria-orientation` present (FR-030) — *(this batch: AutomationId-not-name (Skia) + xamlautomationid DOM (WASM); LabeledBy/IDREF deferred)*
 
 ### Implementation — G1 (P1)
 
-- [ ] T020 [US7] Source `aria-label` only from `ResolveLabel`; surface `AutomationId` as a DOM id (`xamlautomationid`/`data-*`), in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs` + `.../ts/Runtime/Accessibility.ts` (FR-018)
+- [X] T020 [US7] Source `aria-label` only from `ResolveLabel`; surface `AutomationId` as a DOM id (`xamlautomationid`/`data-*`), in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs` + `.../ts/Runtime/Accessibility.ts` (FR-018)
 - [ ] T021 [US7] Populate `AriaAttributes.LabelledBy` in `src/Uno.UI/Accessibility/AriaMapper.cs` and emit `aria-labelledby` (resolve labeller's semantic id) on both paths in `WebAssemblyAccessibility.cs` + `Accessibility.ts` (FR-019)
-- [ ] T022 [US7] Normalize `FindHtmlRole` UIA tokens → valid ARIA (`image`→`img`, `edit`→`textbox`, drop `pane`/`window`/`custom`/…) and reconcile `ToggleSwitch`→`switch`, in `src/Uno.UI/UI/Xaml/Automation/AutomationProperties.uno.cs` (FR-020; shared C# — validate the native path too)
+- [X] T022 [US7] Normalize `FindHtmlRole` UIA tokens → valid ARIA (`image`→`img`, `edit`→`textbox`, drop `pane`/`window`/`custom`/…) and reconcile `ToggleSwitch`→`switch`, in `src/Uno.UI/UI/Xaml/Automation/AutomationProperties.uno.cs` (FR-020; shared C# — validate the native path too)
 - [ ] T023 [US7] Apply the full `GetAriaAttributes` set on the generic `AddSemanticElement` path (describedby/controls/flowto/required/description/posinset/setsize/selected/valuenow/modal+`role=dialog`) in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs` (FR-021; consumes T005)
 - [ ] T024 [US7] IDREF integrity: emit relationship ids only when `HasSemanticElement(handle)`, clear on remove/deselect, with defensive `getElementById` guards, in `SemanticElementFactory.cs` + `WebAssemblyAccessibility.cs` + `Accessibility.ts` (FR-022)
 - [ ] T055 [US7] Virtualized-item ARIA parity: thread the full attribute set (roles, name, posinset/setsize, state) through the virtualized fast-path (`addVirtualizedItem`/`registerVirtualizedContainer`) so ListView/ItemsRepeater items don't bypass the factory's attribute application, in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/ts/Runtime/SemanticElements.ts` + `Accessibility/WebAssemblyAccessibility.cs` (G1; research §5/§8.2) *(added during /speckit-analyze remediation)*
-- [ ] T025 [US7] Run the G1 subset of T019 → green (incl. T055 virtualized parity)
+- [ ] T025 [US7] Run the G1 subset of T019 → green (incl. T055 virtualized parity) — **HAND-OFF** (no build here): run G1 subset after build.
 
 ### Implementation — G2 (P2)
 

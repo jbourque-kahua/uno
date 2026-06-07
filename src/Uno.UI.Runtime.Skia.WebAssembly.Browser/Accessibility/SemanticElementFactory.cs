@@ -29,6 +29,8 @@ internal static partial class SemanticElementFactory
 	/// <param name="y">Y position.</param>
 	/// <param name="width">Element width.</param>
 	/// <param name="height">Element height.</param>
+	/// <param name="owner">The owner UIElement, when available.</param>
+	/// <param name="isFocusable">Whether the element should be keyboard-focusable (drives tabindex).</param>
 	/// <returns>True if element was created successfully.</returns>
 	public static bool CreateElement(
 		AutomationPeer peer,
@@ -39,7 +41,8 @@ internal static partial class SemanticElementFactory
 		float y,
 		float width,
 		float height,
-		UIElement? owner = null)
+		UIElement? owner,
+		bool isFocusable)
 	{
 		var elementType = AriaMapper.GetSemanticElementType(peer, owner);
 		var attributes = AriaMapper.GetAriaAttributes(peer);
@@ -47,31 +50,31 @@ internal static partial class SemanticElementFactory
 
 		var created = elementType switch
 		{
-			SemanticElementType.Button => CreateButtonElement(peer, handle, parentHandle, index, x, y, width, height, attributes),
-			SemanticElementType.ToggleButton => CreateToggleButtonElement(peer, handle, parentHandle, index, x, y, width, height, attributes),
-			SemanticElementType.Switch => CreateSwitchElement(peer, handle, parentHandle, index, x, y, width, height, attributes),
-			SemanticElementType.Checkbox => CreateCheckboxElement(peer, handle, parentHandle, index, x, y, width, height, attributes, false),
-			SemanticElementType.RadioButton => CreateCheckboxElement(peer, handle, parentHandle, index, x, y, width, height, attributes, true),
-			SemanticElementType.Slider => CreateSliderElement(peer, handle, parentHandle, index, x, y, width, height, attributes),
-			SemanticElementType.TextBox => CreateTextBoxElement(peer, handle, parentHandle, index, x, y, width, height, attributes, false, false),
-			SemanticElementType.TextArea => CreateTextBoxElement(peer, handle, parentHandle, index, x, y, width, height, attributes, true, false),
-			SemanticElementType.Password => CreateTextBoxElement(peer, handle, parentHandle, index, x, y, width, height, attributes, false, true),
-			SemanticElementType.ComboBox => CreateComboBoxElement(peer, handle, parentHandle, index, x, y, width, height, attributes),
-			SemanticElementType.ListBox => CreateListBoxElement(peer, handle, parentHandle, index, x, y, width, height, attributes),
-			SemanticElementType.ListItem => CreateListItemElement(peer, handle, parentHandle, index, x, y, width, height, attributes),
-			SemanticElementType.Link => CreateLinkElement(peer, handle, parentHandle, index, x, y, width, height, attributes),
-			SemanticElementType.Heading => CreateHeadingElement(peer, handle, parentHandle, index, x, y, width, height, attributes),
-			SemanticElementType.TabList => CreateTabListElement(peer, handle, parentHandle, index, x, y, width, height, attributes),
-			SemanticElementType.Tab => CreateTabElement(peer, handle, parentHandle, index, x, y, width, height, attributes),
-			SemanticElementType.Tree => CreateTreeElement(peer, handle, parentHandle, index, x, y, width, height, attributes),
-			SemanticElementType.TreeItem => CreateTreeItemElement(peer, handle, parentHandle, index, x, y, width, height, attributes),
-			SemanticElementType.Grid => CreateGridElement(peer, handle, parentHandle, index, x, y, width, height, attributes),
-			SemanticElementType.GridRow => CreateGridRowElement(peer, handle, parentHandle, index, x, y, width, height, attributes),
-			SemanticElementType.GridCell => CreateGridCellElement(peer, handle, parentHandle, index, x, y, width, height, attributes),
-			SemanticElementType.ColumnHeader => CreateColumnHeaderElement(peer, handle, parentHandle, index, x, y, width, height, attributes),
-			SemanticElementType.Menu => CreateMenuElement(peer, handle, parentHandle, index, x, y, width, height, attributes),
-			SemanticElementType.MenuItem => CreateMenuItemElement(peer, handle, parentHandle, index, x, y, width, height, attributes),
-			_ => CreateGenericElement(peer, handle, parentHandle, index, x, y, width, height, attributes)
+			SemanticElementType.Button => CreateButtonElement(peer, handle, parentHandle, index, x, y, width, height, attributes, isFocusable),
+			SemanticElementType.ToggleButton => CreateToggleButtonElement(peer, handle, parentHandle, index, x, y, width, height, attributes, isFocusable),
+			SemanticElementType.Switch => CreateSwitchElement(peer, handle, parentHandle, index, x, y, width, height, attributes, isFocusable),
+			SemanticElementType.Checkbox => CreateCheckboxElement(peer, handle, parentHandle, index, x, y, width, height, attributes, false, isFocusable),
+			SemanticElementType.RadioButton => CreateCheckboxElement(peer, handle, parentHandle, index, x, y, width, height, attributes, true, isFocusable),
+			SemanticElementType.Slider => CreateSliderElement(peer, handle, parentHandle, index, x, y, width, height, attributes, isFocusable),
+			SemanticElementType.TextBox => CreateTextBoxElement(peer, handle, parentHandle, index, x, y, width, height, attributes, false, false, isFocusable),
+			SemanticElementType.TextArea => CreateTextBoxElement(peer, handle, parentHandle, index, x, y, width, height, attributes, true, false, isFocusable),
+			SemanticElementType.Password => CreateTextBoxElement(peer, handle, parentHandle, index, x, y, width, height, attributes, false, true, isFocusable),
+			SemanticElementType.ComboBox => CreateComboBoxElement(peer, handle, parentHandle, index, x, y, width, height, attributes, isFocusable),
+			SemanticElementType.ListBox => CreateListBoxElement(peer, handle, parentHandle, index, x, y, width, height, attributes, isFocusable),
+			SemanticElementType.ListItem => CreateListItemElement(peer, handle, parentHandle, index, x, y, width, height, attributes, isFocusable),
+			SemanticElementType.Link => CreateLinkElement(peer, handle, parentHandle, index, x, y, width, height, attributes, isFocusable),
+			SemanticElementType.Heading => CreateHeadingElement(peer, handle, parentHandle, index, x, y, width, height, attributes, isFocusable),
+			SemanticElementType.TabList => CreateTabListElement(peer, handle, parentHandle, index, x, y, width, height, attributes, isFocusable),
+			SemanticElementType.Tab => CreateTabElement(peer, handle, parentHandle, index, x, y, width, height, attributes, isFocusable),
+			SemanticElementType.Tree => CreateTreeElement(peer, handle, parentHandle, index, x, y, width, height, attributes, isFocusable),
+			SemanticElementType.TreeItem => CreateTreeItemElement(peer, handle, parentHandle, index, x, y, width, height, attributes, isFocusable),
+			SemanticElementType.Grid => CreateGridElement(peer, handle, parentHandle, index, x, y, width, height, attributes, isFocusable),
+			SemanticElementType.GridRow => CreateGridRowElement(peer, handle, parentHandle, index, x, y, width, height, attributes, isFocusable),
+			SemanticElementType.GridCell => CreateGridCellElement(peer, handle, parentHandle, index, x, y, width, height, attributes, isFocusable),
+			SemanticElementType.ColumnHeader => CreateColumnHeaderElement(peer, handle, parentHandle, index, x, y, width, height, attributes, isFocusable),
+			SemanticElementType.Menu => CreateMenuElement(peer, handle, parentHandle, index, x, y, width, height, attributes, isFocusable),
+			SemanticElementType.MenuItem => CreateMenuItemElement(peer, handle, parentHandle, index, x, y, width, height, attributes, isFocusable),
+			_ => CreateGenericElement(peer, handle, parentHandle, index, x, y, width, height, attributes, isFocusable)
 		};
 
 		// Ensure aria-label is applied for all control types (FR-030, WCAG 4.1.2)
@@ -187,7 +190,8 @@ internal static partial class SemanticElementFactory
 		float y,
 		float width,
 		float height,
-		AriaAttributes attributes)
+		AriaAttributes attributes,
+		bool isFocusable)
 	{
 		NativeMethods.CreateButtonElement(
 			parentHandle,
@@ -198,7 +202,8 @@ internal static partial class SemanticElementFactory
 			width,
 			height,
 			attributes.Label,
-			attributes.Disabled);
+			attributes.Disabled,
+			isFocusable);
 		return true;
 	}
 
@@ -215,7 +220,8 @@ internal static partial class SemanticElementFactory
 		float width,
 		float height,
 		AriaAttributes attributes,
-		bool isRadio)
+		bool isRadio,
+		bool isFocusable)
 	{
 		if (isRadio)
 		{
@@ -239,7 +245,8 @@ internal static partial class SemanticElementFactory
 				height,
 				isChecked,
 				attributes.Label,
-				groupName);
+				groupName,
+				isFocusable);
 		}
 		else
 		{
@@ -252,7 +259,8 @@ internal static partial class SemanticElementFactory
 				width,
 				height,
 				attributes.Checked,
-				attributes.Label);
+				attributes.Label,
+				isFocusable);
 		}
 
 		return true;
@@ -270,7 +278,8 @@ internal static partial class SemanticElementFactory
 		float y,
 		float width,
 		float height,
-		AriaAttributes attributes)
+		AriaAttributes attributes,
+		bool isFocusable)
 	{
 		var value = attributes.ValueNow ?? 0;
 		var min = attributes.ValueMin ?? 0;
@@ -305,7 +314,8 @@ internal static partial class SemanticElementFactory
 			max,
 			step,
 			orientation,
-			attributes.ValueText);
+			attributes.ValueText,
+			isFocusable);
 		return true;
 	}
 
@@ -323,7 +333,8 @@ internal static partial class SemanticElementFactory
 		float height,
 		AriaAttributes attributes,
 		bool multiline,
-		bool password)
+		bool password,
+		bool isFocusable)
 	{
 		var value = "";
 		var isReadOnly = false;
@@ -361,7 +372,8 @@ internal static partial class SemanticElementFactory
 			password,
 			isReadOnly,
 			selectionStart,
-			selectionEnd);
+			selectionEnd,
+			isFocusable);
 
 		// Set native placeholder on the input element
 		if (!string.IsNullOrEmpty(placeholder))
@@ -384,7 +396,8 @@ internal static partial class SemanticElementFactory
 		float y,
 		float width,
 		float height,
-		AriaAttributes attributes)
+		AriaAttributes attributes,
+		bool isFocusable)
 	{
 		var expanded = attributes.Expanded ?? false;
 		string? selectedValue = null;
@@ -405,7 +418,8 @@ internal static partial class SemanticElementFactory
 			width,
 			height,
 			expanded,
-			selectedValue);
+			selectedValue,
+			isFocusable);
 		return true;
 	}
 
@@ -421,7 +435,8 @@ internal static partial class SemanticElementFactory
 		float y,
 		float width,
 		float height,
-		AriaAttributes attributes)
+		AriaAttributes attributes,
+		bool isFocusable)
 	{
 		var multiselect = attributes.MultiSelectable ?? false;
 
@@ -433,7 +448,8 @@ internal static partial class SemanticElementFactory
 			y,
 			width,
 			height,
-			multiselect);
+			multiselect,
+			isFocusable);
 		return true;
 	}
 
@@ -449,7 +465,8 @@ internal static partial class SemanticElementFactory
 		float y,
 		float width,
 		float height,
-		AriaAttributes attributes)
+		AriaAttributes attributes,
+		bool isFocusable)
 	{
 		var selected = attributes.Selected ?? false;
 		var positionInSet = attributes.PositionInSet ?? 0;
@@ -465,7 +482,8 @@ internal static partial class SemanticElementFactory
 			height,
 			selected,
 			positionInSet,
-			sizeOfSet);
+			sizeOfSet,
+			isFocusable);
 		return true;
 	}
 
@@ -481,7 +499,8 @@ internal static partial class SemanticElementFactory
 		float y,
 		float width,
 		float height,
-		AriaAttributes attributes)
+		AriaAttributes attributes,
+		bool isFocusable)
 	{
 		NativeMethods.CreateLinkElement(
 			parentHandle,
@@ -491,7 +510,8 @@ internal static partial class SemanticElementFactory
 			y,
 			width,
 			height,
-			attributes.Label);
+			attributes.Label,
+			isFocusable);
 		return true;
 	}
 
@@ -507,7 +527,8 @@ internal static partial class SemanticElementFactory
 		float y,
 		float width,
 		float height,
-		AriaAttributes attributes)
+		AriaAttributes attributes,
+		bool isFocusable)
 	{
 		var level = attributes.Level ?? 2; // Default to h2 if no heading level specified
 
@@ -520,7 +541,8 @@ internal static partial class SemanticElementFactory
 			width,
 			height,
 			level,
-			attributes.Label);
+			attributes.Label,
+			isFocusable);
 		return true;
 	}
 
@@ -537,7 +559,8 @@ internal static partial class SemanticElementFactory
 		float y,
 		float width,
 		float height,
-		AriaAttributes attributes)
+		AriaAttributes attributes,
+		bool isFocusable)
 	{
 		var pressed = attributes.Checked ?? "false";
 		NativeMethods.CreateToggleButtonElement(
@@ -550,7 +573,8 @@ internal static partial class SemanticElementFactory
 			height,
 			attributes.Label,
 			pressed,
-			attributes.Disabled);
+			attributes.Disabled,
+			isFocusable);
 		return true;
 	}
 
@@ -567,7 +591,8 @@ internal static partial class SemanticElementFactory
 		float y,
 		float width,
 		float height,
-		AriaAttributes attributes)
+		AriaAttributes attributes,
+		bool isFocusable)
 	{
 		var isOn = attributes.Checked ?? "false";
 		NativeMethods.CreateSwitchElement(
@@ -580,7 +605,8 @@ internal static partial class SemanticElementFactory
 			height,
 			attributes.Label,
 			isOn,
-			attributes.Disabled);
+			attributes.Disabled,
+			isFocusable);
 		return true;
 	}
 
@@ -596,7 +622,8 @@ internal static partial class SemanticElementFactory
 		float y,
 		float width,
 		float height,
-		AriaAttributes attributes)
+		AriaAttributes attributes,
+		bool isFocusable)
 	{
 		NativeMethods.CreateTabListElement(
 			parentHandle,
@@ -606,7 +633,8 @@ internal static partial class SemanticElementFactory
 			y,
 			width,
 			height,
-			attributes.Label);
+			attributes.Label,
+			isFocusable);
 		return true;
 	}
 
@@ -622,7 +650,8 @@ internal static partial class SemanticElementFactory
 		float y,
 		float width,
 		float height,
-		AriaAttributes attributes)
+		AriaAttributes attributes,
+		bool isFocusable)
 	{
 		var selected = attributes.Selected ?? false;
 		var positionInSet = attributes.PositionInSet ?? 0;
@@ -639,7 +668,8 @@ internal static partial class SemanticElementFactory
 			attributes.Label,
 			selected,
 			positionInSet,
-			sizeOfSet);
+			sizeOfSet,
+			isFocusable);
 		return true;
 	}
 
@@ -655,7 +685,8 @@ internal static partial class SemanticElementFactory
 		float y,
 		float width,
 		float height,
-		AriaAttributes attributes)
+		AriaAttributes attributes,
+		bool isFocusable)
 	{
 		var multiselectable = attributes.MultiSelectable ?? false;
 
@@ -668,7 +699,8 @@ internal static partial class SemanticElementFactory
 			width,
 			height,
 			attributes.Label,
-			multiselectable);
+			multiselectable,
+			isFocusable);
 		return true;
 	}
 
@@ -684,7 +716,8 @@ internal static partial class SemanticElementFactory
 		float y,
 		float width,
 		float height,
-		AriaAttributes attributes)
+		AriaAttributes attributes,
+		bool isFocusable)
 	{
 		var level = attributes.Level ?? 1;
 		var selected = attributes.Selected ?? false;
@@ -711,7 +744,8 @@ internal static partial class SemanticElementFactory
 			expanded,
 			selected,
 			positionInSet,
-			sizeOfSet);
+			sizeOfSet,
+			isFocusable);
 		return true;
 	}
 
@@ -727,7 +761,8 @@ internal static partial class SemanticElementFactory
 		float y,
 		float width,
 		float height,
-		AriaAttributes attributes)
+		AriaAttributes attributes,
+		bool isFocusable)
 	{
 		var rowCount = 0;
 		var colCount = 0;
@@ -748,7 +783,8 @@ internal static partial class SemanticElementFactory
 			height,
 			attributes.Label,
 			rowCount,
-			colCount);
+			colCount,
+			isFocusable);
 		return true;
 	}
 
@@ -764,7 +800,8 @@ internal static partial class SemanticElementFactory
 		float y,
 		float width,
 		float height,
-		AriaAttributes attributes)
+		AriaAttributes attributes,
+		bool isFocusable)
 	{
 		// ARIA aria-rowindex is 1-based; ensure at least 1
 		var rowIndex = Math.Max(attributes.PositionInSet ?? 1, 1);
@@ -777,7 +814,8 @@ internal static partial class SemanticElementFactory
 			y,
 			width,
 			height,
-			rowIndex);
+			rowIndex,
+			isFocusable);
 		return true;
 	}
 
@@ -793,7 +831,8 @@ internal static partial class SemanticElementFactory
 		float y,
 		float width,
 		float height,
-		AriaAttributes attributes)
+		AriaAttributes attributes,
+		bool isFocusable)
 	{
 		var rowIndex = 0;
 		var colIndex = 0;
@@ -815,7 +854,8 @@ internal static partial class SemanticElementFactory
 			height,
 			attributes.Label,
 			rowIndex,
-			colIndex);
+			colIndex,
+			isFocusable);
 		return true;
 	}
 
@@ -831,7 +871,8 @@ internal static partial class SemanticElementFactory
 		float y,
 		float width,
 		float height,
-		AriaAttributes attributes)
+		AriaAttributes attributes,
+		bool isFocusable)
 	{
 		var colIndex = 0;
 		if (peer.GetPattern(PatternInterface.GridItem) is IGridItemProvider gridItemProvider)
@@ -848,7 +889,8 @@ internal static partial class SemanticElementFactory
 			width,
 			height,
 			attributes.Label,
-			colIndex);
+			colIndex,
+			isFocusable);
 		return true;
 	}
 
@@ -864,7 +906,8 @@ internal static partial class SemanticElementFactory
 		float y,
 		float width,
 		float height,
-		AriaAttributes attributes)
+		AriaAttributes attributes,
+		bool isFocusable)
 	{
 		NativeMethods.CreateMenuElement(
 			parentHandle,
@@ -874,7 +917,8 @@ internal static partial class SemanticElementFactory
 			y,
 			width,
 			height,
-			attributes.Label);
+			attributes.Label,
+			isFocusable);
 		return true;
 	}
 
@@ -890,7 +934,8 @@ internal static partial class SemanticElementFactory
 		float y,
 		float width,
 		float height,
-		AriaAttributes attributes)
+		AriaAttributes attributes,
+		bool isFocusable)
 	{
 		var hasSubmenu = attributes.Expanded.HasValue; // If it can expand, it has a submenu
 
@@ -904,7 +949,8 @@ internal static partial class SemanticElementFactory
 			height,
 			attributes.Label,
 			attributes.Disabled,
-			hasSubmenu);
+			hasSubmenu,
+			isFocusable);
 		return true;
 	}
 
@@ -921,9 +967,11 @@ internal static partial class SemanticElementFactory
 		float y,
 		float width,
 		float height,
-		AriaAttributes attributes)
+		AriaAttributes attributes,
+		bool isFocusable)
 	{
-		// Returns false to signal caller should use the existing AddSemanticElement for backward compatibility
+		// Returns false to signal caller should use the existing AddSemanticElement for backward compatibility.
+		// Focusability for this fallback path is applied by AddSemanticElement, not here.
 		return false;
 	}
 
@@ -999,40 +1047,40 @@ internal static partial class SemanticElementFactory
 	private static partial class NativeMethods
 	{
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.SemanticElements.createButtonElement")]
-		internal static partial void CreateButtonElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string? label, bool disabled);
+		internal static partial void CreateButtonElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string? label, bool disabled, bool isFocusable);
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.SemanticElements.createSliderElement")]
-		internal static partial void CreateSliderElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, double value, double min, double max, double step, string orientation, string? valueText);
+		internal static partial void CreateSliderElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, double value, double min, double max, double step, string orientation, string? valueText, bool isFocusable);
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.SemanticElements.createCheckboxElement")]
-		internal static partial void CreateCheckboxElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string? checkedState, string? label);
+		internal static partial void CreateCheckboxElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string? checkedState, string? label, bool isFocusable);
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.SemanticElements.createRadioElement")]
-		internal static partial void CreateRadioElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, bool isChecked, string? label, string? groupName);
+		internal static partial void CreateRadioElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, bool isChecked, string? label, string? groupName, bool isFocusable);
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.SemanticElements.createTextBoxElement")]
-		internal static partial void CreateTextBoxElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string value, bool multiline, bool password, bool isReadOnly, int selectionStart, int selectionEnd);
+		internal static partial void CreateTextBoxElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string value, bool multiline, bool password, bool isReadOnly, int selectionStart, int selectionEnd, bool isFocusable);
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.SemanticElements.createComboBoxElement")]
-		internal static partial void CreateComboBoxElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, bool expanded, string? selectedValue);
+		internal static partial void CreateComboBoxElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, bool expanded, string? selectedValue, bool isFocusable);
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.SemanticElements.createListBoxElement")]
-		internal static partial void CreateListBoxElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, bool multiselect);
+		internal static partial void CreateListBoxElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, bool multiselect, bool isFocusable);
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.SemanticElements.createListItemElement")]
-		internal static partial void CreateListItemElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, bool selected, int positionInSet, int sizeOfSet);
+		internal static partial void CreateListItemElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, bool selected, int positionInSet, int sizeOfSet, bool isFocusable);
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.SemanticElements.createLinkElement")]
-		internal static partial void CreateLinkElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string? label);
+		internal static partial void CreateLinkElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string? label, bool isFocusable);
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.SemanticElements.createHeadingElement")]
-		internal static partial void CreateHeadingElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, int level, string? label);
+		internal static partial void CreateHeadingElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, int level, string? label, bool isFocusable);
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.SemanticElements.createToggleButtonElement")]
-		internal static partial void CreateToggleButtonElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string? label, string pressed, bool disabled);
+		internal static partial void CreateToggleButtonElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string? label, string pressed, bool disabled, bool isFocusable);
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.SemanticElements.createSwitchElement")]
-		internal static partial void CreateSwitchElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string? label, string isOn, bool disabled);
+		internal static partial void CreateSwitchElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string? label, string isOn, bool disabled, bool isFocusable);
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.Accessibility.updateAriaLabel")]
 		internal static partial void UpdateAriaLabel(IntPtr handle, string label);
@@ -1073,34 +1121,34 @@ internal static partial class SemanticElementFactory
 		// ===== Tab / Tree / Grid / Menu Element Creation =====
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.SemanticElements.createTabListElement")]
-		internal static partial void CreateTabListElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string? label);
+		internal static partial void CreateTabListElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string? label, bool isFocusable);
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.SemanticElements.createTabElement")]
-		internal static partial void CreateTabElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string? label, bool selected, int positionInSet, int sizeOfSet);
+		internal static partial void CreateTabElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string? label, bool selected, int positionInSet, int sizeOfSet, bool isFocusable);
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.SemanticElements.createTreeElement")]
-		internal static partial void CreateTreeElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string? label, bool multiselectable);
+		internal static partial void CreateTreeElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string? label, bool multiselectable, bool isFocusable);
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.SemanticElements.createTreeItemElement")]
-		internal static partial void CreateTreeItemElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string? label, int level, string expanded, bool selected, int positionInSet, int sizeOfSet);
+		internal static partial void CreateTreeItemElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string? label, int level, string expanded, bool selected, int positionInSet, int sizeOfSet, bool isFocusable);
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.SemanticElements.createGridElement")]
-		internal static partial void CreateGridElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string? label, int rowCount, int colCount);
+		internal static partial void CreateGridElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string? label, int rowCount, int colCount, bool isFocusable);
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.SemanticElements.createGridRowElement")]
-		internal static partial void CreateGridRowElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, int rowIndex);
+		internal static partial void CreateGridRowElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, int rowIndex, bool isFocusable);
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.SemanticElements.createGridCellElement")]
-		internal static partial void CreateGridCellElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string? label, int rowIndex, int colIndex);
+		internal static partial void CreateGridCellElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string? label, int rowIndex, int colIndex, bool isFocusable);
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.SemanticElements.createColumnHeaderElement")]
-		internal static partial void CreateColumnHeaderElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string? label, int colIndex);
+		internal static partial void CreateColumnHeaderElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string? label, int colIndex, bool isFocusable);
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.SemanticElements.createMenuElement")]
-		internal static partial void CreateMenuElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string? label);
+		internal static partial void CreateMenuElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string? label, bool isFocusable);
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.SemanticElements.createMenuItemElement")]
-		internal static partial void CreateMenuItemElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string? label, bool disabled, bool hasSubmenu);
+		internal static partial void CreateMenuItemElement(IntPtr parentHandle, IntPtr handle, int? index, float x, float y, float width, float height, string? label, bool disabled, bool hasSubmenu, bool isFocusable);
 
 		// ===== Relationship Updates =====
 

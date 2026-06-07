@@ -391,7 +391,8 @@ namespace Uno.UI.Runtime.Skia {
 			isVisible: boolean,
 			horizontallyScrollable: boolean,
 			verticallyScrollable: boolean,
-			temporary: string): boolean {
+			temporary: string,
+			xamlAutomationId: string): boolean {
 
 			// Remove any pre-existing element with this handle to prevent duplicates
 			const existing = document.getElementById(`uno-semantics-${handle}`);
@@ -431,6 +432,10 @@ namespace Uno.UI.Runtime.Skia {
 
 			if (automationId) {
 				element.setAttribute("aria-label", automationId);
+			}
+
+			if (xamlAutomationId) {
+				element.setAttribute("xamlautomationid", xamlAutomationId);
 			}
 
 			if (horizontallyScrollable) {

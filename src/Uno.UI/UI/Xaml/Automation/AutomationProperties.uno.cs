@@ -29,12 +29,15 @@ public sealed partial class AutomationProperties
 				uiElement.SetAttribute("xamlautomationid", (string)args.NewValue);
 			}
 
+			// aria-label is applied independently of role: the FR-020 role-token
+			// normalization now returns null for non-ARIA control types, and a missing
+			// role must not also drop the label on the native WASM DOM path.
+			uiElement.SetAttribute("aria-label", (string)args.NewValue);
+
 			var role = FindHtmlRole(uiElement);
 			if (role != null)
 			{
-				uiElement.SetAttribute(
-					("aria-label", (string)args.NewValue),
-					("role", role));
+				uiElement.SetAttribute("role", role);
 			}
 		}
 #endif
@@ -86,7 +89,7 @@ public sealed partial class AutomationProperties
 		}
 		if (uIElement is Image)
 		{
-			return "image";
+			return "img";
 		}
 		if (uIElement is HyperlinkButton)
 		{
@@ -94,11 +97,11 @@ public sealed partial class AutomationProperties
 		}
 		if (uIElement is PasswordBox)
 		{
-			return "edit";
+			return "textbox";
 		}
 		if (uIElement is RichEditBox)
 		{
-			return "edit";
+			return "textbox";
 		}
 		if (uIElement is ComboBox)
 		{
@@ -114,7 +117,7 @@ public sealed partial class AutomationProperties
 		}
 		if (uIElement is ToggleSwitch)
 		{
-			return "checkbox";
+			return "switch";
 		}
 		if (uIElement is ListView or ListBox)
 		{
@@ -126,7 +129,8 @@ public sealed partial class AutomationProperties
 		}
 		if (uIElement is ScrollViewer)
 		{
-			return "pane";
+			// "pane" is not a valid WAI-ARIA role; ScrollViewer carries no semantic role here.
+			return null;
 		}
 		if (uIElement is MenuBar)
 		{
@@ -154,7 +158,7 @@ public sealed partial class AutomationProperties
 		}
 		if (uIElement is PivotItem)
 		{
-			return "tabitem";
+			return "tab";
 		}
 		if (uIElement is AppBar or CommandBar)
 		{
@@ -171,14 +175,13 @@ public sealed partial class AutomationProperties
 			return type switch
 			{
 				AutomationControlType.Button => "button",
-				AutomationControlType.Calendar => "calendar",
 				AutomationControlType.CheckBox => "checkbox",
 				AutomationControlType.Edit => "textbox",
 				AutomationControlType.Slider => "slider",
-				AutomationControlType.Spinner => "spinner",
-				AutomationControlType.StatusBar => "statusbar",
+				AutomationControlType.Spinner => "spinbutton",
+				AutomationControlType.StatusBar => "status",
 				AutomationControlType.Tab => "tab",
-				AutomationControlType.TabItem => "tabitem",
+				AutomationControlType.TabItem => "tab",
 				// "label" is NOT a valid WAI-ARIA role. Screen readers (VoiceOver)
 				// ignore it and may announce the element as "group" instead.
 				// Text elements should use no explicit role — their text is
@@ -188,22 +191,26 @@ public sealed partial class AutomationProperties
 				AutomationControlType.ToolTip => "tooltip",
 				AutomationControlType.Tree => "tree",
 				AutomationControlType.TreeItem => "treeitem",
-				AutomationControlType.Custom => "custom",
 				AutomationControlType.Group => "group",
-				AutomationControlType.Thumb => "thumb",
-				AutomationControlType.DataGrid => "datagrid",
+				AutomationControlType.DataGrid => "grid",
 				AutomationControlType.DataItem => "dataitem",
 				AutomationControlType.Document => "document",
-				AutomationControlType.SplitButton => "splitbutton",
-				AutomationControlType.Window => "window",
-				AutomationControlType.Pane => "pane",
 				AutomationControlType.Header => "header",
-				AutomationControlType.HeaderItem => "headeritem",
 				AutomationControlType.Table => "table",
-				AutomationControlType.TitleBar => "titlebar",
 				AutomationControlType.Separator => "separator",
-				AutomationControlType.SemanticZoom => "semanticzoom",
 				AutomationControlType.AppBar => "appbar",
+				// The following UIA control types have no valid WAI-ARIA role.
+				// Emitting them as a "role" attribute is rejected by the
+				// accessibility tree, so map them to null (no role) instead.
+				AutomationControlType.Calendar => null,
+				AutomationControlType.Custom => null,
+				AutomationControlType.Thumb => null,
+				AutomationControlType.SplitButton => null,
+				AutomationControlType.Window => null,
+				AutomationControlType.Pane => null,
+				AutomationControlType.HeaderItem => null,
+				AutomationControlType.TitleBar => null,
+				AutomationControlType.SemanticZoom => null,
 				_ => null,
 			};
 		}

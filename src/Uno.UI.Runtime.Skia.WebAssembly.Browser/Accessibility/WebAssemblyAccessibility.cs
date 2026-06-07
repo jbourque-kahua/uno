@@ -1233,7 +1233,8 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 				y,
 				width,
 				height,
-				child);
+				child,
+				IsAccessibilityFocusable(child, child.IsFocusable));
 
 			if (created)
 			{
@@ -1276,23 +1277,15 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 			}
 		}
 
-		var automationId = AutomationProperties.GetAutomationId(child);
+		// The accessible name (aria-label) must come ONLY from the resolved name.
+		// AutomationId is surfaced separately as the xamlautomationid attribute and
+		// must never leak into aria-label.
+		var name = automationPeer is not null
+			? automationPeer.GetName()
+			: AutomationProperties.GetName(child);
+		var xamlAutomationId = AutomationProperties.GetAutomationId(child);
 		var horizontallyScrollable = false;
 		var verticallyScrollable = false;
-		if (automationPeer is not null)
-		{
-
-			if (string.IsNullOrEmpty(automationId))
-			{
-				automationId = automationPeer.GetName();
-			}
-		}
-		else if (string.IsNullOrEmpty(automationId))
-		{
-			// For elements without an automation peer (e.g., named StackPanel/Border groups),
-			// use AutomationProperties.Name as the label
-			automationId = AutomationProperties.GetName(child);
-		}
 
 		if (automationPeer is IScrollProvider scrollProvider)
 		{
@@ -1317,10 +1310,10 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 		}
 		if (this.Log().IsEnabled(LogLevel.Trace))
 		{
-			this.Log().Trace($"[A11y] AddSemanticElement: generic path — control={child.GetType().Name} handle={child.Visual.Handle} role='{role}' automationId='{automationId}'");
+			this.Log().Trace($"[A11y] AddSemanticElement: generic path — control={child.GetType().Name} handle={child.Visual.Handle} role='{role}' name='{name}' automationId='{xamlAutomationId}'");
 		}
 
-		var result = NativeMethods.AddSemanticElement(parentHandle, child.Visual.Handle, index, width, height, x, y, role, automationId, IsAccessibilityFocusable(child, child.IsFocusable), ariaChecked, child.Visual.IsVisible, horizontallyScrollable, verticallyScrollable, child.GetType().Name);
+		var result = NativeMethods.AddSemanticElement(parentHandle, child.Visual.Handle, index, width, height, x, y, role, name, IsAccessibilityFocusable(child, child.IsFocusable), ariaChecked, child.Visual.IsVisible, horizontallyScrollable, verticallyScrollable, child.GetType().Name, xamlAutomationId);
 
 		if (!result && this.Log().IsEnabled(LogLevel.Error))
 		{
@@ -1918,7 +1911,7 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 		internal static partial void AddRootElementToSemanticsRoot(IntPtr rootHandle, float width, float height, float x, float y, bool isFocusable);
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.Accessibility.addSemanticElement")]
-		internal static partial bool AddSemanticElement(IntPtr parentHandle, IntPtr handle, int? index, float width, float height, float x, float y, string role, string automationId, bool isFocusable, string? ariaChecked, bool isVisible, bool horizontallyScrollable, bool verticallyScrollable, string temporary);
+		internal static partial bool AddSemanticElement(IntPtr parentHandle, IntPtr handle, int? index, float width, float height, float x, float y, string role, string automationId, bool isFocusable, string? ariaChecked, bool isVisible, bool horizontallyScrollable, bool verticallyScrollable, string temporary, string? xamlAutomationId);
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.Accessibility.removeSemanticElement")]
 		internal static partial void RemoveSemanticElement(IntPtr parentHandle, IntPtr childHandle);
