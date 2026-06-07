@@ -1435,12 +1435,29 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 			}
 		}
 
+		// The accessible name (aria-label) must come ONLY from the resolved name (ResolveLabel),
+		// never the raw GetName() or a descendant-text dump. It is also the gate for landmark/region
+		// emission (FR-014): an unlabeled landmark/region MUST NOT be emitted.
+		var resolvedName = automationPeer is not null
+			? AriaMapper.ResolveLabel(automationPeer)
+			: AutomationProperties.GetName(child);
+		var hasAccessibleName = !string.IsNullOrEmpty(resolvedName);
+
 		// Fall back to generic semantic element for unsupported control types.
 		// Prefer AriaMapper role (covers Image, Group, etc.) over FindHtmlRole.
 		var role = (automationPeer is not null
 			? AriaMapper.GetAriaRole(automationPeer.GetAutomationControlType())
 			: null)
 			?? AutomationProperties.FindHtmlRole(child);
+
+		// FR-013/FR-014: a ScrollViewer (control type Pane → "region") only earns role=region when it
+		// is actually scrollable AND named. A non-scrollable or unnamed ScrollViewer must NOT become an
+		// (unlabeled) landmark — drop the region role so it renders as a plain structural <div>.
+		if (string.Equals(role, "region", StringComparison.Ordinal) &&
+			!AriaMapper.QualifiesAsNamedScrollRegion(automationPeer, child))
+		{
+			role = null;
+		}
 
 		// Containers with AutomationProperties.Name but no peer/role act as accessible groups.
 		// This matches WinUI3 where named containers create UIA Group elements.
@@ -1455,22 +1472,25 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 
 		// Elements with a LandmarkType get the corresponding ARIA landmark role.
 		// This overrides any other role since landmarks are a higher-level semantic.
+		// FR-014: a landmark/region MUST NOT be emitted unlabeled — drop the landmark role when the
+		// element has no accessible name so we never produce an unnamed landmark (axe "region must
+		// have a name"). A named container can still fall back to the role="group" path above.
 		var landmarkType = AutomationProperties.GetLandmarkType(child);
-		if (landmarkType != AutomationLandmarkType.None)
+		var hasLandmark = false;
+		if (landmarkType != AutomationLandmarkType.None && hasAccessibleName)
 		{
 			var landmarkRole = AriaMapper.GetLandmarkRole(landmarkType);
 			if (!string.IsNullOrEmpty(landmarkRole))
 			{
 				role = landmarkRole;
+				hasLandmark = true;
 			}
 		}
 
-		// The accessible name (aria-label) must come ONLY from the resolved name.
+		// The accessible name (aria-label) comes ONLY from the resolved name (ResolveLabel).
 		// AutomationId is surfaced separately as the xamlautomationid attribute and
 		// must never leak into aria-label.
-		var name = automationPeer is not null
-			? automationPeer.GetName()
-			: AutomationProperties.GetName(child);
+		var name = resolvedName;
 		var xamlAutomationId = AutomationProperties.GetAutomationId(child);
 		var horizontallyScrollable = false;
 		var verticallyScrollable = false;
@@ -1513,8 +1533,11 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 		{
 			var handle = child.Visual.Handle;
 
-			// Custom landmark → aria-roledescription
-			if (landmarkType == AutomationLandmarkType.Custom)
+			// Custom landmark → aria-roledescription.
+			// FR-014: aria-roledescription is NOT a substitute for an accessible name — never emit it
+			// on an unnamed element. Only emit it when the landmark itself was kept (i.e. the element
+			// has a name), so a roledescription always rides on a named landmark.
+			if (hasLandmark && landmarkType == AutomationLandmarkType.Custom)
 			{
 				var localizedLandmarkType = AutomationProperties.GetLocalizedLandmarkType(child);
 				if (!string.IsNullOrEmpty(localizedLandmarkType))

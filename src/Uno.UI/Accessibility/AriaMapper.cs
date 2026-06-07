@@ -449,6 +449,52 @@ public static class AriaMapper
 	}
 
 	/// <summary>
+	/// Determines whether an element is actually scrollable for accessibility purposes (FR-013).
+	/// A ScrollViewer that cannot scroll its content is not a meaningful <c>role=region</c> landmark.
+	/// Scrollability is taken from the <see cref="IScrollProvider"/> pattern when present, falling back
+	/// to the element's <c>IsScrollPort</c> flag for scroll ports without a scroll-aware peer.
+	/// </summary>
+	/// <param name="peer">The automation peer (may expose <see cref="IScrollProvider"/>).</param>
+	/// <param name="owner">The owning UIElement, used for the <c>IsScrollPort</c> fallback.</param>
+	/// <returns>True when the element can scroll along at least one axis.</returns>
+	public static bool IsScrollable(AutomationPeer? peer, UIElement? owner)
+	{
+		try
+		{
+			if (peer?.GetPattern(PatternInterface.Scroll) is IScrollProvider scrollProvider)
+			{
+				return scrollProvider.HorizontallyScrollable || scrollProvider.VerticallyScrollable;
+			}
+		}
+		catch
+		{
+			// Some peers may throw if the scroll pattern is queried before they are fully initialized.
+		}
+
+		return owner?.IsScrollPort == true;
+	}
+
+	/// <summary>
+	/// Gates the <c>region</c> landmark role (FR-013/FR-014). A ScrollViewer (control type <c>Pane</c>)
+	/// or a custom landmark only earns <c>role=region</c> when it is actually scrollable AND has a real
+	/// accessible name resolved through <see cref="ResolveLabel"/> (never raw <c>GetName()</c> or a
+	/// descendant-text dump). An unnamed or non-scrollable candidate MUST NOT be exposed as a region,
+	/// since an unlabeled landmark is an axe "region must have a name" violation.
+	/// </summary>
+	/// <param name="peer">The automation peer.</param>
+	/// <param name="owner">The owning UIElement, used for the <c>IsScrollPort</c> fallback.</param>
+	/// <returns>True when the element qualifies as a named, scrollable region.</returns>
+	public static bool QualifiesAsNamedScrollRegion(AutomationPeer? peer, UIElement? owner)
+	{
+		if (peer is null)
+		{
+			return false;
+		}
+
+		return IsScrollable(peer, owner) && !string.IsNullOrEmpty(ResolveLabel(peer));
+	}
+
+	/// <summary>
 	/// Maps AutomationLandmarkType to ARIA landmark role.
 	/// VoiceOver uses landmarks for rotor navigation.
 	/// </summary>
