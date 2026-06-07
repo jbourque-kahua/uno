@@ -386,7 +386,7 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 
 			// Don't recurse into virtualized containers — their items are managed
 			// by VirtualizedSemanticRegion via ContainerContentChanging/ElementPrepared.
-			if (child is not (ListViewBase or ItemsRepeater))
+			if (child is not (ListViewBase or ItemsRepeater) || !isChildSemantic)
 			{
 				// Recurse into children — if this element was skipped,
 				// its children will be parented to the nearest semantic ancestor.
@@ -456,6 +456,14 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 	private void TryRegisterVirtualizedContainer(UIElement element)
 	{
 		if (element is not (ItemsRepeater or ListViewBase))
+		{
+			return;
+		}
+
+		// FR-031: a decorative (AccessibilityView=Raw) container — e.g. RadioButtons' InnerRepeater —
+		// must NOT be emitted as a listbox/grid region. The walkers recurse into it so its non-decorative
+		// items still emit via the normal path.
+		if (!IsSemanticElement(element))
 		{
 			return;
 		}
@@ -1353,7 +1361,7 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 
 		// Don't recurse into virtualized containers — their items are managed
 		// by VirtualizedSemanticRegion via ContainerContentChanging/ElementPrepared.
-		if (child is ListViewBase or ItemsRepeater)
+		if (child is (ListViewBase or ItemsRepeater) && isSemantic)
 		{
 			return;
 		}

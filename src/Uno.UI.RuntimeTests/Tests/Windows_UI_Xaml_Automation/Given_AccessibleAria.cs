@@ -381,6 +381,37 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Automation
 				"A focused NavigationViewItem's own DOM node must be document.activeElement, not its container ancestor.");
 		}
 
+		/// <summary>
+		/// FR-031 (WASM): a decorative AccessibilityView=Raw ItemsRepeater (e.g. RadioButtons' InnerRepeater)
+		/// must NOT be registered/emitted as a virtualized listbox region — doing so exposes a phantom
+		/// listbox as clutter. The walkers instead recurse into it so non-decorative items still emit. A
+		/// visible sibling confirms the build completed. Fails before the container Raw-gate, passes after.
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		[PlatformCondition(ConditionMode.Include, RuntimeTestPlatforms.SkiaWasm)]
+		public async Task When_Repeater_Is_AccessibilityView_Raw_Then_Not_Emitted_As_Listbox()
+		{
+			var sibling = new Button { Content = "Sibling" };
+			var repeater = new ItemsRepeater { ItemsSource = new[] { "Alpha", "Beta" } };
+			AutomationProperties.SetAccessibilityView(repeater, AccessibilityView.Raw);
+			var panel = new StackPanel();
+			panel.Children.Add(sibling);
+			panel.Children.Add(repeater);
+
+			await UITestHelper.Load(panel);
+			await UITestHelper.WaitForIdle();
+
+			EnableAccessibilityThroughDom();
+			await UITestHelper.WaitFor(() => SemanticElementExists(sibling), timeoutMS: 5000,
+				message: "Timed out waiting for the visible sibling's semantic node (build completion).");
+			await UITestHelper.WaitForIdle();
+
+			Assert.IsTrue(SemanticElementExists(sibling), "A visible Button sibling must emit a semantic node.");
+			Assert.IsFalse(SemanticElementExists(repeater),
+				"A decorative AccessibilityView=Raw ItemsRepeater must not be emitted as a virtualized listbox (FR-031).");
+		}
+
 		private static void EnableAccessibilityThroughDom()
 		{
 			InvokeBrowserJs("(function(){const button = document.getElementById('uno-enable-accessibility'); if (button) { button.click(); } return 'ok';})()");
