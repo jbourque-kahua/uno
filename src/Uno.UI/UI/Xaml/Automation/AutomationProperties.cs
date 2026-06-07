@@ -129,7 +129,7 @@ public partial class AutomationProperties
 			"HeadingLevel",
 			typeof(AutomationHeadingLevel),
 			typeof(AutomationProperties),
-			new FrameworkPropertyMetadata(default(AutomationHeadingLevel)));
+			new FrameworkPropertyMetadata(default(AutomationHeadingLevel), OnHeadingLevelChanged));
 
 	/// <summary>
 	/// Identifies the HelpText attached property, which supplies helpful context or instructions for the element.

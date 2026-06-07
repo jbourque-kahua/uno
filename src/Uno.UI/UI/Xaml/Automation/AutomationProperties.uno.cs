@@ -55,6 +55,21 @@ public sealed partial class AutomationProperties
 #endif
 	}
 
+	// FR-011: a runtime HeadingLevel change must reach assistive tech. The attached property is not
+	// polled by RaiseAutomaticPropertyChanges, so we raise the change here; the accessibility router
+	// then live-updates aria-level (the <hN> tag, clamped to <h6> at creation, is not re-created).
+	private static void OnHeadingLevelChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs args)
+	{
+#if __SKIA__
+		if (AutomationPeer.AutomationPeerListener?.ListenerExistsHelper(AutomationEvents.PropertyChanged) == true &&
+			dependencyObject is UIElement element &&
+			element.GetOrCreateAutomationPeer() is { } peer)
+		{
+			AutomationPeer.AutomationPeerListener.NotifyPropertyChangedEvent(peer, AutomationElementIdentifiers.HeadingLevelProperty, args.OldValue, args.NewValue);
+		}
+#endif
+	}
+
 #if __WASM__ || __SKIA__
 	internal static string FindHtmlRole(UIElement uIElement)
 	{

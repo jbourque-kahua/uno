@@ -458,9 +458,11 @@ namespace Uno.UI.Runtime.Skia {
 			label: string | null,
 			isFocusable: boolean
 		): void {
-			// Clamp heading level to valid h1-h6 range
-			const clampedLevel = Math.max(1, Math.min(6, level));
-			const element = document.createElement(`h${clampedLevel}`) as HTMLHeadingElement;
+			// HTML only has <h1>-<h6>, so the tag is clamped to that range, but the TRUE WinUI
+			// level (1-9) is preserved on aria-level so assistive tech sees the real depth (FR-011).
+			const trueLevel = Math.max(1, Math.min(9, level));
+			const tagLevel = Math.min(6, trueLevel);
+			const element = document.createElement(`h${tagLevel}`) as HTMLHeadingElement;
 			this.applyCommonStyles(element, x, y, width, height, handle);
 
 			// A heading is a structural/rotor landmark, not a tab stop: it gets NO tabindex (T014).
@@ -478,7 +480,7 @@ namespace Uno.UI.Runtime.Skia {
 				element.textContent = label;
 			}
 
-			element.setAttribute('aria-level', String(clampedLevel));
+			element.setAttribute('aria-level', String(trueLevel));
 
 			this.appendToParent(element, parentHandle, index);
 		}

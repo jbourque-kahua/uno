@@ -1892,6 +1892,19 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 				NativeMethods.UpdatePositionInSet(element.Visual.Handle, positionInSet, sizeOfSet);
 			}
 		}
+		else if (automationProperty == AutomationElementIdentifiers.HeadingLevelProperty &&
+			TryGetPeerOwner(peer, out element))
+		{
+			// FR-011: live-sync aria-level on HeadingLevel change. The <hN> tag is fixed at
+			// creation (clamped to <h6>), but aria-level carries the true level (1-9), so a
+			// runtime change to level 7-9 is reflected without re-creating the element.
+			var level = ConvertHeadingLevel(newValue);
+			if (this.Log().IsEnabled(LogLevel.Trace))
+			{
+				this.Log().Trace($"[A11y] PROP CHANGE: HeadingLevel handle={element.Visual.Handle} element={element.GetType().Name} level={level}");
+			}
+			UpdateHeadingLevel(element.Visual.Handle, level);
+		}
 	}
 
 	public override void OnAutomationEvent(AutomationPeer peer, AutomationEvents eventId)
