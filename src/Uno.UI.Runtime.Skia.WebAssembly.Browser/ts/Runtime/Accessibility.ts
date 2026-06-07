@@ -612,6 +612,38 @@ namespace Uno.UI.Runtime.Skia {
 		}
 
 		/**
+		 * Updates aria-busy on a semantic element.
+		 * Mapped from AutomationProperties.ItemStatus when the status indicates the
+		 * element is busy/loading, so screen readers suppress reading transient content.
+		 */
+		public static updateAriaBusy(handle: number, busy: boolean): void {
+			const element = Accessibility.getSemanticElementByHandle(handle);
+			if (element) {
+				if (busy) {
+					element.setAttribute("aria-busy", "true");
+				} else {
+					element.removeAttribute("aria-busy");
+				}
+			}
+		}
+
+		/**
+		 * Updates the lang attribute on a semantic element.
+		 * Mapped from AutomationProperties.Culture so screen readers pronounce the
+		 * content using the correct locale.
+		 */
+		public static updateLang(handle: number, lang: string): void {
+			const element = Accessibility.getSemanticElementByHandle(handle);
+			if (element) {
+				if (lang) {
+					element.setAttribute("lang", lang);
+				} else {
+					element.removeAttribute("lang");
+				}
+			}
+		}
+
+		/**
 		 * Updates aria-live on a semantic element for live region announcements.
 		 * Screen readers monitor elements with aria-live for content changes.
 		 */

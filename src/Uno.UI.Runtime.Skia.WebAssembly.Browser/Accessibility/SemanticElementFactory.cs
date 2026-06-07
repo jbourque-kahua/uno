@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Runtime.InteropServices.JavaScript;
 using System.Text;
 using Microsoft.UI.Xaml;
@@ -192,6 +193,13 @@ internal static partial class SemanticElementFactory
 		if (created && attributes.Modal == true)
 		{
 			NativeMethods.UpdateAriaModal(handle, true);
+		}
+
+		// Apply owner-scoped attributes sourced from AutomationProperties attached properties
+		// (aria-level, aria-busy, lang). These are independent of the resolved element type.
+		if (created && owner is not null)
+		{
+			ApplyOwnerScopedAriaAttributes(owner, handle);
 		}
 
 		return created;
@@ -1059,6 +1067,87 @@ internal static partial class SemanticElementFactory
 	}
 
 	/// <summary>
+	/// Applies the owner-scoped ARIA attributes that are derived from <see cref="AutomationProperties"/>
+	/// attached properties rather than from automation patterns: <c>aria-level</c>
+	/// (<see cref="AutomationProperties.LevelProperty"/>), <c>aria-busy</c>
+	/// (<see cref="AutomationProperties.ItemStatusProperty"/>) and <c>lang</c>
+	/// (<see cref="AutomationProperties.CultureProperty"/>).
+	/// </summary>
+	/// <remarks>
+	/// Shared between the factory path and the generic <c>AddSemanticElement</c> path so both
+	/// emit the same attributes regardless of the resolved element type.
+	/// </remarks>
+	internal static void ApplyOwnerScopedAriaAttributes(UIElement owner, IntPtr handle)
+	{
+		// aria-level from AutomationProperties.Level (distinct from heading level, which is
+		// emitted by the heading factory). Level is a 1-based hierarchical position; 0 = unset.
+		var level = AutomationProperties.GetLevel(owner);
+		if (level > 0)
+		{
+			NativeMethods.UpdateAriaLevel(handle, level);
+		}
+
+		// aria-busy from AutomationProperties.ItemStatus. ItemStatus is a free-form status
+		// string ("New", "Busy", "Loading", ...); we map it conservatively to aria-busy only
+		// when it clearly conveys a busy/in-progress state.
+		var itemStatus = AutomationProperties.GetItemStatus(owner);
+		if (IsBusyStatus(itemStatus))
+		{
+			NativeMethods.UpdateAriaBusy(handle, true);
+		}
+
+		// lang from AutomationProperties.Culture (an LCID). The XAML FrameworkElement.Language
+		// property is not implemented on Skia/WASM, so Culture is the reliable source here.
+		var lang = ResolveLang(owner);
+		if (!string.IsNullOrEmpty(lang))
+		{
+			NativeMethods.UpdateLang(handle, lang);
+		}
+	}
+
+	/// <summary>
+	/// Determines whether an <see cref="AutomationProperties.ItemStatusProperty"/> value
+	/// represents a busy / in-progress state that should surface as <c>aria-busy="true"</c>.
+	/// </summary>
+	private static bool IsBusyStatus(string? itemStatus)
+	{
+		if (string.IsNullOrWhiteSpace(itemStatus))
+		{
+			return false;
+		}
+
+		var trimmed = itemStatus.Trim();
+		return trimmed.Equals("busy", StringComparison.OrdinalIgnoreCase)
+			|| trimmed.Equals("loading", StringComparison.OrdinalIgnoreCase)
+			|| trimmed.Equals("updating", StringComparison.OrdinalIgnoreCase);
+	}
+
+	/// <summary>
+	/// Resolves the BCP-47 language tag for the <c>lang</c> attribute from
+	/// <see cref="AutomationProperties.CultureProperty"/> (an LCID). Returns <c>null</c> when
+	/// no culture is set or the LCID cannot be resolved.
+	/// </summary>
+	private static string? ResolveLang(UIElement owner)
+	{
+		var lcid = AutomationProperties.GetCulture(owner);
+		if (lcid <= 0)
+		{
+			return null;
+		}
+
+		try
+		{
+			var name = CultureInfo.GetCultureInfo(lcid).Name;
+			return string.IsNullOrEmpty(name) ? null : name;
+		}
+		catch (CultureNotFoundException)
+		{
+			// Unknown/invalid LCID — skip rather than emitting a bogus lang attribute.
+			return null;
+		}
+	}
+
+	/// <summary>
 	/// Resolves a collection of AutomationPeers to a space-separated list of DOM element IDs
 	/// using the uno-semantics-{handle} convention.
 	/// </summary>
@@ -1216,5 +1305,14 @@ internal static partial class SemanticElementFactory
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.Accessibility.updateAriaModal")]
 		internal static partial void UpdateAriaModal(IntPtr handle, bool modal);
+
+		[JSImport("globalThis.Uno.UI.Runtime.Skia.Accessibility.updateAriaLevel")]
+		internal static partial void UpdateAriaLevel(IntPtr handle, int level);
+
+		[JSImport("globalThis.Uno.UI.Runtime.Skia.Accessibility.updateAriaBusy")]
+		internal static partial void UpdateAriaBusy(IntPtr handle, bool busy);
+
+		[JSImport("globalThis.Uno.UI.Runtime.Skia.Accessibility.updateLang")]
+		internal static partial void UpdateLang(IntPtr handle, string lang);
 	}
 }

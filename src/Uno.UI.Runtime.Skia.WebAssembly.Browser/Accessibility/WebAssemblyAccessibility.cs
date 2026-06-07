@@ -1583,6 +1583,10 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 					NativeMethods.UpdateAriaKeyShortcuts(handle, keyShortcuts);
 				}
 			}
+
+			// Owner-scoped attributes sourced from AutomationProperties attached properties
+			// (aria-level, aria-busy, lang). Mirrors the factory path so both surface them.
+			SemanticElementFactory.ApplyOwnerScopedAriaAttributes(child, handle);
 		}
 
 		return result;

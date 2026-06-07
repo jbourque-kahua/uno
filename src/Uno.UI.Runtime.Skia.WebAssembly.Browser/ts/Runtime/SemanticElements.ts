@@ -323,9 +323,14 @@ namespace Uno.UI.Runtime.Skia {
 				element.setAttribute('aria-valuetext', valueText);
 			}
 
+			// aria-orientation reflects the XAML Slider.Orientation so screen readers
+			// announce the axis. Emitted for both axes (the implicit default is
+			// horizontal, but being explicit is clearer for AT and tests).
+			element.setAttribute('aria-orientation', orientation === 'vertical' ? 'vertical' : 'horizontal');
+
 			if (orientation === 'vertical') {
-				// Some browsers support orient attribute, others need CSS
-				element.setAttribute('orient', 'vertical');
+				// CSS still drives the native vertical rendering; this is presentational
+				// only and complements the semantic aria-orientation above.
 				element.style.writingMode = 'bt-lr';
 				element.style.webkitAppearance = 'slider-vertical';
 			}
