@@ -63,7 +63,7 @@ independently shippable increment (mirrors plan.md Phases A–G).
 - [X] T009 [US1] Routed the radio DOM `change` to `callbacks.onSelection` → existing `OnSelection` JSExport → `ISelectionItemProvider.Select()` (not `onToggle`), in `SemanticElements.ts` `createRadioElement` (FR-002).
 - [X] T010 [US1] External `IsSelected` change now updates the radio's native `checked` via `UpdateAriaChecked` (not `aria-selected`/`UpdateSelectionState`) in `WebAssemblyAccessibility.cs` `NotifyPropertyChangedEventCore` (FR-003).
 - [X] T011 [US1] Radio roving at creation: `element.tabIndex = checked ? 0 : -1` in `SemanticElements.ts` `createRadioElement` (FR-004). *(First-when-none-checked is completed by US2/T016 focus-driven roving.)*
-- [ ] T012 [US1] **HAND-OFF**: run T006 → green and validate on Skia Desktop (shared `AriaMapper` change — plan watch-item). Validation so far: TS typecheck clean; C# code-review only. Commands in the report below.
+- [ ] T012 [US1] **HAND-OFF**: run T006 → green and validate on Skia Desktop (shared `AriaMapper` change — plan watch-item). Validation so far: TS typecheck clean; C# code-review only. Commands in the report below.  — **Behavior runtime-validated via A11y Inspector** (radio `aria-checked` + exactly one `tabindex=0` per group, others `-1`, observed live on WASM). Remaining: the formal `Given_AccessibleCheckBox` run on Skia Desktop (needs a build).
 
 **Checkpoint**: RadioButton fully operable (MVP).
 
@@ -85,7 +85,7 @@ independently shippable increment (mirrors plan.md Phases A–G).
 - [X] T015 [US2] Apply one consistent **roving** composite model (container `-1`/active-item `0`) for listbox/tablist/tree/menu/grid AND the virtualized container fast-path in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/ts/Runtime/SemanticElements.ts` (FR-007)
 - [X] T016 [US2] Drive `UpdateRovingTabindex` from focus movement (call from `OnXamlGotFocus`/`OnBrowserFocus`) + promote one item at creation, in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/FocusSynchronizer.cs` (FR-012)
 - [X] T017 [US2] Remove the tab stop from div/table composites when disabled, at creation and in `updateDisabledState`, in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/ts/Runtime/SemanticElements.ts` (FR-008) — *(done where a disabled flag exists: button/toggle/switch gated `isFocusable && !disabled`; div-composites have no disabled param — deferred, see handoff)*
-- [ ] T018 [US2] Run T013 → green — **HAND-OFF** (no build here): run on Skia WASM after build.
+- [ ] T018 [US2] Run T013 → green — **HAND-OFF** (no build here): run on Skia WASM after build.  — **Behavior runtime-validated via A11y Inspector** (headings emit no `tabindex`; composite containers not tab stops, observed live on WASM). Remaining: the formal `Given_AccessibleTabindex` run (needs a build).
 
 **Checkpoint**: Tab order contains only interactive controls.
 
@@ -103,7 +103,7 @@ independently shippable increment (mirrors plan.md Phases A–G).
 
 ### Implementation — G1 (P1)
 
-- [X] T020 [US7] Source `aria-label` only from `ResolveLabel`; surface `AutomationId` as a DOM id (`xamlautomationid`/`data-*`), in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs` + `.../ts/Runtime/Accessibility.ts` (FR-018)
+- [X] T020 [US7] Source `aria-label` only from `ResolveLabel`; surface `AutomationId` as a DOM id (`xamlautomationid`/`data-*`), in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs` + `.../ts/Runtime/Accessibility.ts` (FR-018) *(Extended to the factory `Create*Element` path via a post-create `SetXamlAutomationId` setter — runtime-confirmed via A11y Inspector: generic-path RadioGroup already emitted `xamlautomationid`; factory-path controls (checkbox/button/radio/textbox) now do too.)*
 - [ ] T021 [US7] Populate `AriaAttributes.LabelledBy` in `src/Uno.UI/Accessibility/AriaMapper.cs` and emit `aria-labelledby` (resolve labeller's semantic id) on both paths in `WebAssemblyAccessibility.cs` + `Accessibility.ts` (FR-019)
 - [X] T022 [US7] Normalize `FindHtmlRole` UIA tokens → valid ARIA (`image`→`img`, `edit`→`textbox`, drop `pane`/`window`/`custom`/…) and reconcile `ToggleSwitch`→`switch`, in `src/Uno.UI/UI/Xaml/Automation/AutomationProperties.uno.cs` (FR-020; shared C# — validate the native path too)
 - [ ] T023 [US7] Apply the full `GetAriaAttributes` set on the generic `AddSemanticElement` path (describedby/controls/flowto/required/description/posinset/setsize/selected/valuenow/modal+`role=dialog`) in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs` (FR-021; consumes T005)

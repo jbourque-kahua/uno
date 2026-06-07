@@ -85,6 +85,17 @@ internal static partial class SemanticElementFactory
 			NativeMethods.UpdateAriaLabel(handle, attributes.Label);
 		}
 
+		// Surface AutomationProperties.AutomationId as the xamlautomationid attribute on
+		// factory-path elements (a stable test/automation id, not the accessible name).
+		if (created && owner is not null)
+		{
+			var xamlAutomationId = AutomationProperties.GetAutomationId(owner);
+			if (!string.IsNullOrEmpty(xamlAutomationId))
+			{
+				NativeMethods.SetXamlAutomationId(handle, xamlAutomationId);
+			}
+		}
+
 		// Apply aria-description from HelpText for VoiceOver secondary context
 		if (created && !string.IsNullOrEmpty(attributes.Description))
 		{
@@ -1084,6 +1095,9 @@ internal static partial class SemanticElementFactory
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.Accessibility.updateAriaLabel")]
 		internal static partial void UpdateAriaLabel(IntPtr handle, string label);
+
+		[JSImport("globalThis.Uno.UI.Runtime.Skia.Accessibility.setXamlAutomationId")]
+		internal static partial void SetXamlAutomationId(IntPtr handle, string automationId);
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.Accessibility.updateAriaDescription")]
 		internal static partial void UpdateAriaDescription(IntPtr handle, string description);

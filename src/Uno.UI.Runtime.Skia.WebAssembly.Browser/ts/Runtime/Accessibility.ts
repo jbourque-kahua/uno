@@ -479,6 +479,13 @@ namespace Uno.UI.Runtime.Skia {
 			// tree (pruned as non-semantic). This is expected.
 		}
 
+		public static setXamlAutomationId(handle: number, automationId: string): void {
+			const element = Accessibility.getSemanticElementByHandle(handle);
+			if (element) {
+				element.setAttribute("xamlautomationid", automationId);
+			}
+		}
+
 		public static updateAriaLabel(handle: number, automationId: string): void {
 			Accessibility.debugLog(`[A11y] TS updateAriaLabel: handle=${handle} label='${automationId}'`);
 			const element = Accessibility.getSemanticElementByHandle(handle);
