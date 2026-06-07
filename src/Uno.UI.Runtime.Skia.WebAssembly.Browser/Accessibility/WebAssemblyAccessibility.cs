@@ -134,6 +134,12 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 	/// "parent handle not found in DOM" errors.
 	/// </summary>
 	private readonly Dictionary<IntPtr, IntPtr> _semanticParentMap = new();
+	/// <summary>
+	/// Handles of elements pruned from the AOM because they were Visibility=Collapsed at build/add
+	/// time (T058). When such an element later becomes visible, OnSizeOrOffsetChanged re-emits it —
+	/// no other post-build path creates a node and there is no show-counterpart to hide.
+	/// </summary>
+	private readonly HashSet<IntPtr> _prunedHandles = new();
 
 	// Debounce timer infrastructure for DOM updates (FR-012: 100ms debounce)
 	private const int DebounceDelayMs = 100;
@@ -302,6 +308,7 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 			// is absent from the UIA tree). Equivalent to !child.Visual.IsVisible.
 			if (IsPrunedAsHidden(child))
 			{
+				_prunedHandles.Add(child.Visual.Handle);
 				return;
 			}
 
@@ -402,6 +409,7 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 				}
 				RemoveSemanticElement(semanticParent, childHandle);
 				_semanticParentMap.Remove(childHandle);
+				_prunedHandles.Remove(childHandle);
 			}
 		}
 		catch (Exception ex)
@@ -632,6 +640,17 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 			else
 			{
 				var handle = containerVisual.Handle;
+				// T058: a previously-Collapsed element pruned at build/add time has no semantic node; now
+				// that it is visible again, re-emit it (and its now-visible subtree). No other post-build
+				// path creates a node (there is no show-counterpart to HideSemanticElement).
+				if (_prunedHandles.Remove(handle) && containerVisual.Owner?.Target is UIElement shownElement)
+				{
+					var shownParent = shownElement.GetParent() as UIElement;
+					var shownParentHandle = shownParent is not null ? FindSemanticParent(shownParent) : _rootElementHandle;
+					BuildSemanticsTreeRecursive(shownParentHandle, shownElement);
+					return;
+				}
+
 				if (_semanticParentMap.TryGetValue(handle, out var semanticParentHandle)
 					&& containerVisual.Owner?.Target is UIElement element)
 				{
@@ -1263,6 +1282,7 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 		// is absent from the UIA tree). Equivalent to !child.Visual.IsVisible.
 		if (IsPrunedAsHidden(child))
 		{
+			_prunedHandles.Add(child.Visual.Handle);
 			return;
 		}
 

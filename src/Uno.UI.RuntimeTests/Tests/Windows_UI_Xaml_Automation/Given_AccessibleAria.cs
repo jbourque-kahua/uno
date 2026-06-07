@@ -293,6 +293,44 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Automation
 			Assert.IsFalse(SemanticElementExists(separator), "A decorative NavigationViewItemSeparator (AccessibilityView=Raw) must NOT be emitted as a semantic node (FR-031).");
 		}
 
+		/// <summary>
+		/// T058 lazy re-emit (FR-032, WASM): an element Collapsed at AOM-build time is pruned (no node),
+		/// but when it later flips Visibility=Collapsed->Visible it MUST be re-emitted — no other post-build
+		/// path creates a node and there is no show-counterpart to HideSemanticElement. A visible sibling
+		/// confirms the build completed before asserting the collapsed one is absent. Fails before the lazy
+		/// re-emit (element stays unexposed forever), passes after.
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		[PlatformCondition(ConditionMode.Include, RuntimeTestPlatforms.SkiaWasm)]
+		public async Task When_Collapsed_Element_Becomes_Visible_Then_Semantic_Node_Is_Emitted()
+		{
+			var visibleSibling = new Button { Content = "VisibleSibling" };
+			var toggling = new Button { Content = "TogglingBtn", Visibility = Visibility.Collapsed };
+			var panel = new StackPanel();
+			panel.Children.Add(visibleSibling);
+			panel.Children.Add(toggling);
+
+			await UITestHelper.Load(panel);
+			await UITestHelper.WaitForIdle();
+
+			EnableAccessibilityThroughDom();
+			await UITestHelper.WaitFor(() => SemanticElementExists(visibleSibling), timeoutMS: 5000,
+				message: "Timed out waiting for the visible sibling's semantic node (build completion).");
+			await UITestHelper.WaitForIdle();
+
+			// Collapsed at build time => pruned (T058). The sibling above proves the AOM build finished.
+			Assert.IsFalse(SemanticElementExists(toggling), "A Collapsed Button must not be emitted while collapsed.");
+
+			// Flip to Visible => must be re-emitted by the lazy re-emit path in OnSizeOrOffsetChanged.
+			toggling.Visibility = Visibility.Visible;
+			await UITestHelper.WaitFor(() => SemanticElementExists(toggling), timeoutMS: 5000,
+				message: "Timed out waiting for the re-emitted semantic node after Collapsed->Visible.");
+			await UITestHelper.WaitForIdle();
+
+			Assert.IsTrue(SemanticElementExists(toggling), "A Button that flips Collapsed->Visible must be re-emitted to the AT tree (T058 lazy re-emit).");
+		}
+
 		private static void EnableAccessibilityThroughDom()
 		{
 			InvokeBrowserJs("(function(){const button = document.getElementById('uno-enable-accessibility'); if (button) { button.click(); } return 'ok';})()");
