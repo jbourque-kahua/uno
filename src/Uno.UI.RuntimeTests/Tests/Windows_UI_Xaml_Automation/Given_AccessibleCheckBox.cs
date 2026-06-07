@@ -300,6 +300,64 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Automation
 			// Assert
 			Assert.AreEqual(Uno.UI.Runtime.Skia.SemanticElementType.RadioButton, elementType);
 		}
+
+		/// <summary>
+		/// US1/FR-001: A checked RadioButton must map to checked="true". RadioButtonAutomationPeer
+		/// exposes ONLY ISelectionItemProvider (not Toggle), so Checked must be derived from
+		/// IsSelected — otherwise the radio always renders unchecked. Fails before the US1 fix.
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		public async Task When_RadioButton_Checked_Then_AriaMapper_Checked_Is_True()
+		{
+			var radioButton = new RadioButton { Content = "Option A", IsChecked = true };
+			await UITestHelper.Load(radioButton);
+
+			var peer = FrameworkElementAutomationPeer.CreatePeerForElement(radioButton);
+			var attributes = Uno.UI.Runtime.Skia.AriaMapper.GetAriaAttributes(peer);
+
+			Assert.AreEqual("true", attributes.Checked, "Checked RadioButton must map to checked='true'");
+		}
+
+		/// <summary>
+		/// US1/FR-001: An unchecked RadioButton must map to checked="false" (not null).
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		public async Task When_RadioButton_Unchecked_Then_AriaMapper_Checked_Is_False()
+		{
+			var radioButton = new RadioButton { Content = "Option B", IsChecked = false };
+			await UITestHelper.Load(radioButton);
+
+			var peer = FrameworkElementAutomationPeer.CreatePeerForElement(radioButton);
+			var attributes = Uno.UI.Runtime.Skia.AriaMapper.GetAriaAttributes(peer);
+
+			Assert.AreEqual("false", attributes.Checked, "Unchecked RadioButton must map to checked='false', not null");
+		}
+
+		/// <summary>
+		/// US1/FR-002+FR-003: DOM activation routes through OnSelection → ISelectionItemProvider.Select().
+		/// Verifies Select() checks the RadioButton and the mapped Checked state follows. Fails before
+		/// the US1 fix (radio activation was a no-op via the absent Toggle pattern).
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		public async Task When_RadioButton_Selected_Via_Peer_Then_IsChecked_And_Mapping_Update()
+		{
+			var radioButton = new RadioButton { Content = "Option C", IsChecked = false };
+			await UITestHelper.Load(radioButton);
+
+			var peer = FrameworkElementAutomationPeer.CreatePeerForElement(radioButton);
+			var selectionItem = peer?.GetPattern(PatternInterface.SelectionItem) as ISelectionItemProvider;
+
+			Assert.IsNotNull(selectionItem, "RadioButton must expose ISelectionItemProvider");
+
+			selectionItem.Select();
+
+			Assert.IsTrue(radioButton.IsChecked == true, "Select() must check the RadioButton");
+			var attributes = Uno.UI.Runtime.Skia.AriaMapper.GetAriaAttributes(peer);
+			Assert.AreEqual("true", attributes.Checked, "After Select(), Checked must be 'true'");
+		}
 #endif
 	}
 }

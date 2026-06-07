@@ -411,7 +411,9 @@ namespace Uno.UI.Runtime.Skia {
 			this.applyCommonStyles(element, x, y, width, height, handle);
 
 			// Enable focus and interaction
-			element.tabIndex = 0;
+			// Roving tabindex: only the checked radio in a group is a tab stop; others are
+			// reachable via arrow keys (focus-driven roving promotes the first when none checked).
+			element.tabIndex = checked ? 0 : -1;
 			element.style.pointerEvents = 'none';
 
 			if (label) {
@@ -426,10 +428,11 @@ namespace Uno.UI.Runtime.Skia {
 
 			const callbacks = this.getCallbacks();
 
-			// Change event handler for toggle events
+			// RadioButton exposes ISelectionItemProvider (not Toggle); route DOM activation to
+			// OnSelection -> Select(). onToggle would be a no-op (the radio peer has no Toggle pattern).
 			element.addEventListener('change', () => {
-				if (callbacks.onToggle) {
-					callbacks.onToggle(handle);
+				if (callbacks.onSelection) {
+					callbacks.onSelection(handle);
 				}
 			});
 

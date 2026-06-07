@@ -264,6 +264,15 @@ public static class AriaMapper
 			if (peer.GetPattern(PatternInterface.SelectionItem) is ISelectionItemProvider selectionItemProvider)
 			{
 				attributes.Selected = selectionItemProvider.IsSelected;
+
+				// RadioButton renders as a native <input type="radio">; its state is the native
+				// "checked" property, not aria-selected (invalid on role="radio"). RadioButton's
+				// peer exposes only SelectionItem (not Toggle), so without this Checked stays null
+				// and the radio always renders unchecked.
+				if (controlType == AutomationControlType.RadioButton)
+				{
+					attributes.Checked = selectionItemProvider.IsSelected ? "true" : "false";
+				}
 			}
 			else if (peer is FrameworkElementAutomationPeer { Owner: SelectorItem selectorItem })
 			{

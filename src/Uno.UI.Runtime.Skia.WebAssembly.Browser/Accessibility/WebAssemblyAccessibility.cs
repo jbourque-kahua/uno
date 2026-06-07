@@ -1555,7 +1555,16 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 			{
 				this.Log().Trace($"[A11y] PROP CHANGE: IsSelected handle={element.Visual.Handle} element={element.GetType().Name} selected={selected}");
 			}
-			NativeMethods.UpdateSelectionState(element.Visual.Handle, selected);
+			if (element is RadioButton)
+			{
+				// RadioButton is a native <input type="radio">; reflect selection as the native
+				// checked state (UpdateAriaChecked sets element.checked). aria-selected is invalid on role="radio".
+				NativeMethods.UpdateAriaChecked(element.Visual.Handle, selected ? "true" : "false");
+			}
+			else
+			{
+				NativeMethods.UpdateSelectionState(element.Visual.Handle, selected);
+			}
 
 			// Update roving tabindex: the newly selected item gets tabindex=0,
 			// other group members get tabindex=-1 (for listbox options, radio groups, tabs)

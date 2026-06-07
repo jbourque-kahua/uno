@@ -57,16 +57,13 @@ independently shippable increment (mirrors plan.md Phases A–G).
 
 ### Tests (write first, must FAIL)
 
-- [ ] T006 [P] [US1] Failing DOM-level tests for RadioButton in `src/Uno.UI.RuntimeTests/Tests/Windows_UI_Xaml_Automation/Given_AccessibleCheckBox.cs`: initial `checked` from `IsChecked`; DOM `change`→peer selection; external `IsChecked`→native `checked` (not `aria-selected`); one `tabindex=0` per group (uses T003)
-
-### Implementation
-
-- [ ] T007 [US1] Populate initial radio `checked` from `RadioButton.IsChecked` (not the absent Toggle pattern) in `src/Uno.UI/Accessibility/AriaMapper.cs` (FR-001)
-- [ ] T008 [US1] Pass the initial `checked` into `CreateRadioElement` in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/SemanticElementFactory.cs` (FR-001)
-- [ ] T009 [US1] Route the radio DOM `change` to a selection JSExport (`OnSelect`→`ISelectionItemProvider.Select`) instead of `onToggle`, in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/ts/Runtime/SemanticElements.ts` and `.../Accessibility/WebAssemblyAccessibility.cs` (FR-002)
-- [ ] T010 [US1] On external `IsChecked`/`IsSelected` change, update the radio's native `checked` via the `updateAriaChecked` path (not `aria-selected`) in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs` (FR-003)
-- [ ] T011 [US1] Radio roving at creation: exactly one radio per group `tabindex=0`, rest `-1`, in `src/Uno.UI.Runtime.Skia.WebAssembly.Browser/ts/Runtime/SemanticElements.ts` `createRadioElement` (FR-004)
-- [ ] T012 [US1] Run T006 → green; validate on Skia Desktop too (shared `AriaMapper` change — plan watch-item)
+- [X] T006 [P] [US1] Tests for RadioButton in `Given_AccessibleCheckBox.cs` (3 active, `#if HAS_UNO`, Skia-Desktop-runnable): initial `checked` from `IsChecked` (checked/unchecked), and DOM-activation path via `ISelectionItemProvider.Select()` → `IsChecked` + `Checked` mapping. *(C#-layer/peer assertions — the DOM-level `<input>` assertions need the WASM AOM and are deferred to the T003 helper / hand-off.)*
+- [X] T007 [US1] Populate initial radio `checked` from `IsSelected` (RadioButton control type) in `src/Uno.UI/Accessibility/AriaMapper.cs` (FR-001) — root-cause fix.
+- [X] T008 [US1] **No code change needed** — `CreateCheckboxElement` already forwards `attributes.Checked == "true"` to `CreateRadioElement` (`SemanticElementFactory.cs:222`); the bug was upstream (T007). Satisfied by T007.
+- [X] T009 [US1] Routed the radio DOM `change` to `callbacks.onSelection` → existing `OnSelection` JSExport → `ISelectionItemProvider.Select()` (not `onToggle`), in `SemanticElements.ts` `createRadioElement` (FR-002).
+- [X] T010 [US1] External `IsSelected` change now updates the radio's native `checked` via `UpdateAriaChecked` (not `aria-selected`/`UpdateSelectionState`) in `WebAssemblyAccessibility.cs` `NotifyPropertyChangedEventCore` (FR-003).
+- [X] T011 [US1] Radio roving at creation: `element.tabIndex = checked ? 0 : -1` in `SemanticElements.ts` `createRadioElement` (FR-004). *(First-when-none-checked is completed by US2/T016 focus-driven roving.)*
+- [ ] T012 [US1] **HAND-OFF**: run T006 → green and validate on Skia Desktop (shared `AriaMapper` change — plan watch-item). Validation so far: TS typecheck clean; C# code-review only. Commands in the report below.
 
 **Checkpoint**: RadioButton fully operable (MVP).
 
