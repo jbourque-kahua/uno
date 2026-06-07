@@ -407,6 +407,23 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 
 	private void TryRegisterVirtualizedContainer(UIElement element)
 	{
+		if (element is not (ItemsRepeater or ListViewBase))
+		{
+			return;
+		}
+
+		// Idempotent: a container may be registered both at AOM-build time (BuildSemanticsTreeRecursive)
+		// and via the dynamic OnChildAdded path. Registering twice would create duplicate regions/
+		// subscriptions and double-emit items.
+		var containerHandle = element.Visual.Handle;
+		foreach (var existingRegion in _virtualizedRegions)
+		{
+			if (existingRegion.ContainerHandle == containerHandle)
+			{
+				return;
+			}
+		}
+
 		if (element is ItemsRepeater repeater)
 		{
 			var region = new VirtualizedSemanticRegion(
@@ -417,31 +434,28 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 			_virtualizedRegions.Add(region);
 
 			repeater.ElementPrepared += (s, e) =>
-			{
-				var itemElement = e.Element;
-				var itemIndex = e.Index;
-				var peer = itemElement.GetOrCreateAutomationPeer();
-				var label = peer?.GetName() ?? string.Empty;
-				var totalCount = repeater.ItemsSourceView?.Count ?? 0;
-				var offset = GetOffsetRelativeToSemanticParent(itemElement, repeater.Visual.Handle);
-				region.OnItemRealized(
-					itemElement.Visual.Handle,
-					itemIndex,
-					totalCount,
-					offset.X, offset.Y,
-					itemElement.Visual.Size.X, itemElement.Visual.Size.Y,
-					"option", label);
-			};
+				EmitRealizedItem(region, repeater.Visual.Handle, e.Element, e.Index, repeater.ItemsSourceView?.Count ?? 0, "option");
 
 			repeater.ElementClearing += (s, e) =>
 			{
-				var itemElement = e.Element;
-				var info = ItemsRepeater.GetVirtualizationInfo(itemElement);
+				var info = ItemsRepeater.GetVirtualizationInfo(e.Element);
 				if (info is not null)
 				{
-					region.OnItemUnrealized(itemElement.Visual.Handle, info.Index);
+					region.OnItemUnrealized(e.Element.Visual.Handle, info.Index);
 				}
 			};
+
+			// Backfill items realized before this container was registered (the AOM-build / Enable-
+			// Accessibility-after-load flow); ElementPrepared only fires for FUTURE realizations.
+			var totalCount = repeater.ItemsSourceView?.Count ?? 0;
+			foreach (var itemElement in repeater.Children)
+			{
+				var info = ItemsRepeater.GetVirtualizationInfo(itemElement);
+				if (info is not null && info.IsRealized)
+				{
+					EmitRealizedItem(region, repeater.Visual.Handle, itemElement, info.Index, totalCount, "option");
+				}
+			}
 		}
 		else if (element is ListViewBase listView)
 		{
@@ -454,37 +468,51 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 				listView.SelectionMode == ListViewSelectionMode.Extended);
 			_virtualizedRegions.Add(region);
 
-			// ListViewBase uses ContainerContentChanging for virtualization lifecycle
+			var itemRole = isGrid ? "row" : "option";
+
 			listView.ContainerContentChanging += (s, e) =>
 			{
 				if (!e.InRecycleQueue)
 				{
-					var itemElement = e.ItemContainer;
-					if (itemElement is not null)
+					if (e.ItemContainer is { } itemElement)
 					{
-						var peer = itemElement.GetOrCreateAutomationPeer();
-						var label = peer?.GetName() ?? string.Empty;
-						var totalCount = listView.Items?.Count ?? 0;
-						var offset = GetOffsetRelativeToSemanticParent(itemElement, listView.Visual.Handle);
-						region.OnItemRealized(
-							itemElement.Visual.Handle,
-							e.ItemIndex,
-							totalCount,
-							offset.X, offset.Y,
-							itemElement.Visual.Size.X, itemElement.Visual.Size.Y,
-							isGrid ? "row" : "option", label);
+						EmitRealizedItem(region, listView.Visual.Handle, itemElement, e.ItemIndex, listView.Items?.Count ?? 0, itemRole);
 					}
 				}
-				else
+				else if (e.ItemContainer is { } itemElement)
 				{
-					var itemElement = e.ItemContainer;
-					if (itemElement is not null)
-					{
-						region.OnItemUnrealized(itemElement.Visual.Handle, e.ItemIndex);
-					}
+					region.OnItemUnrealized(itemElement.Visual.Handle, e.ItemIndex);
 				}
 			};
+
+			// Backfill already-materialized containers (the Enable-Accessibility-after-load flow).
+			var totalCount = listView.Items?.Count ?? 0;
+			foreach (var container in listView.MaterializedContainers.OfType<UIElement>())
+			{
+				var index = listView.IndexFromContainer(container);
+				if (index >= 0)
+				{
+					EmitRealizedItem(region, listView.Visual.Handle, container, index, totalCount, itemRole);
+				}
+			}
 		}
+	}
+
+	/// <summary>
+	/// Emits a single realized virtualized item into its region — shared by the live
+	/// ElementPrepared/ContainerContentChanging handlers and the build-time backfill.
+	/// </summary>
+	private void EmitRealizedItem(VirtualizedSemanticRegion region, IntPtr containerHandle, UIElement itemElement, int index, int totalCount, string role)
+	{
+		var label = itemElement.GetOrCreateAutomationPeer()?.GetName() ?? string.Empty;
+		var offset = GetOffsetRelativeToSemanticParent(itemElement, containerHandle);
+		region.OnItemRealized(
+			itemElement.Visual.Handle,
+			index,
+			totalCount,
+			offset.X, offset.Y,
+			itemElement.Visual.Size.X, itemElement.Visual.Size.Y,
+			role, label);
 	}
 
 	private void TryUnregisterVirtualizedContainer(UIElement element)
@@ -1227,6 +1255,12 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 				this.Log().Warn($"[A11y] AddSemanticElement returned false for {child.GetType().Name} handle={handle}");
 			}
 		}
+
+		// Register virtualized containers (and backfill their already-realized items) at AOM-build
+		// time. OnChildAdded is suppressed during the initial build (_isCreatingAOM guard), so without
+		// this a NavigationView/list already realized at Enable-Accessibility time would never emit its
+		// items — ElementPrepared only fires for future realizations (T057/FR-031).
+		TryRegisterVirtualizedContainer(child);
 
 		// Don't recurse into virtualized containers — their items are managed
 		// by VirtualizedSemanticRegion via ContainerContentChanging/ElementPrepared.

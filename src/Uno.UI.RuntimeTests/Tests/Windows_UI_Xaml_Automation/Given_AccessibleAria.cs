@@ -187,6 +187,46 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Automation
 			Assert.AreEqual(automationId, GetSemanticAttribute(textBlock, "xamlautomationid"), "An AutomationId on a kept TextBlock must be emitted as xamlautomationid (regressed by FR-015's bare Text path).");
 		}
 
+		/// <summary>
+		/// T057 (FR-031, WASM): a virtualized container (NavigationView's MenuItemsHost ItemsRepeater)
+		/// whose items are already realized when accessibility is enabled must still emit a semantic node
+		/// per item. Before the build-time registration + backfill fix, CreateAOM pruned the repeater and
+		/// never registered the virtualized region (OnChildAdded is suppressed during the build), so the
+		/// whole nav was absent from the AT tree. This loads the NavigationView, THEN enables accessibility
+		/// (the broken flow), and asserts each destination emits. Fails before the fix, passes after.
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		[PlatformCondition(ConditionMode.Include, RuntimeTestPlatforms.SkiaWasm)]
+		public async Task When_NavigationView_Items_Realized_Before_Enable_Then_Each_Emits_Semantic_Node()
+		{
+			var home = new NavigationViewItem { Content = "Home" };
+			var settings = new NavigationViewItem { Content = "Settings" };
+			var nav = new NavigationView
+			{
+				PaneDisplayMode = NavigationViewPaneDisplayMode.Left,
+				IsPaneOpen = true,
+				IsSettingsVisible = false,
+				IsBackButtonVisible = NavigationViewBackButtonVisible.Collapsed,
+				Width = 400,
+				Height = 400,
+			};
+			nav.MenuItems.Add(home);
+			nav.MenuItems.Add(settings);
+
+			await UITestHelper.Load(nav);
+			await UITestHelper.WaitForIdle();
+
+			// Enable accessibility AFTER the items are realized — the flow that was broken.
+			EnableAccessibilityThroughDom();
+			await UITestHelper.WaitFor(() => SemanticElementExists(home), timeoutMS: 5000,
+				message: "Timed out waiting for the NavigationView item semantic node (T057 backfill).");
+			await UITestHelper.WaitForIdle();
+
+			Assert.IsTrue(SemanticElementExists(home), "NavigationView item 'Home' must emit a semantic node when accessibility is enabled after load.");
+			Assert.IsTrue(SemanticElementExists(settings), "NavigationView item 'Settings' must emit a semantic node when accessibility is enabled after load.");
+		}
+
 		private static void EnableAccessibilityThroughDom()
 		{
 			InvokeBrowserJs("(function(){const button = document.getElementById('uno-enable-accessibility'); if (button) { button.click(); } return 'ok';})()");
