@@ -292,3 +292,40 @@ state. **Net-new (FR-018…030):** the `AutomationId`/`LabeledBy`/role-token fix
 generic parity, dangling-IDREF integrity, `aria-invalid`/`aria-orientation`/
 `LocalizedControlType`/standalone-`Level`, the missing live-sync branches, value-semantics
 corrections, and ARIA-output tests.
+
+### 8.8 Custom / landmark mapping (focused trace, adversarially verified — verdict: partial)
+
+The role mapping itself is **correct**, but it is surrounded by gaps:
+
+- **Role: correct.** `GetLandmarkRole` ([AriaMapper.cs:421-432](../../src/Uno.UI/Accessibility/AriaMapper.cs))
+  maps `Main/Navigation/Search/Form/Custom → main/navigation/search/form/region`;
+  `Custom→region` is the correct WAI-ARIA mapping. No value→null gap (`None` excluded by
+  callers). Landmark controls take the **generic path** (Custom/Pane/Group → `Generic`), and
+  the generic path *does* apply both the landmark role (overwriting any computed role,
+  [WebAssemblyAccessibility.cs:1269-1277](../../src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs))
+  and (Custom-only) `aria-roledescription` ([:1336-1343](../../src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs)).
+  The factory-path appliers ([SemanticElementFactory.cs:91-101](../../src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/SemanticElementFactory.cs))
+  are dead for landmarks (gated on `created==true`, which is false for Generic).
+- **`LocalizedLandmarkType` honored for Custom only** ([AriaMapper.cs:195](../../src/Uno.UI/Accessibility/AriaMapper.cs),
+  [WebAssemblyAccessibility.cs:1336](../../src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs)).
+  On `Main`/`Navigation`/`Search`/`Form` it is silently dropped — parity gap vs WinUI/UIA
+  (the Win32 backend returns it unconditionally, [Win32RawElementProvider.cs:245](../../src/Uno.UI.Runtime.Skia.Win32/Accessibility/Win32RawElementProvider.cs)). → **FR-025**.
+- **Live-sync dead.** `LandmarkTypeProperty`/`LocalizedLandmarkTypeProperty` register no
+  changed-callback ([AutomationProperties.cs:218-223,258-263](../../src/Uno.UI/UI/Xaml/Automation/AutomationProperties.cs))
+  and are never raised, so the live-sync branches ([WebAssemblyAccessibility.cs:1519-1528](../../src/Uno.UI.Runtime.Skia.WebAssembly.Browser/Accessibility/WebAssemblyAccessibility.cs),
+  [SkiaAccessibilityBase.cs:330-335](../../src/Uno.UI.Runtime.Skia/Accessibility/SkiaAccessibilityBase.cs))
+  are unreachable across all Skia heads. (`HelpText` is dead for the same reason.) → **FR-027**.
+- **Unlabeled region / roledescription-without-name.** A Custom landmark (or any
+  Pane/ScrollViewer) with no name → `role="region"` with no `aria-label` → axe "region must
+  have a name". Worse: with `LocalizedLandmarkType` but no name it emits `role=region` +
+  `aria-roledescription` + no `aria-label` — an *actively non-conforming* use of
+  `aria-roledescription` (ARIA: roledescription requires an accessible name). No name
+  fallback, no diagnostic. → **FR-014**.
+- **Name asymmetry**: generic path uses `GetAutomationId()??GetName()` only, bypassing
+  `ResolveLabel`'s Content/child-TextBlock fallbacks → content-only landmark containers can
+  be unlabeled where a typed control wouldn't. → **FR-018/021**.
+- **Zero tests** (only default-value peer assertions in `Given_AutomationPeer.cs:355-368`).
+- *Corrected (non-load-bearing):* the invalid `FindHtmlRole` tokens `"pane"`/`"custom"` do
+  **not** reach the Skia generic path (valid `region`/`generic` from `AriaMapper` wins
+  first); they're only reachable on the native-WASM DOM path. Auto-raised properties also
+  include `ItemStatus`/`IsOffscreen` (doesn't change the dead-branch conclusion).

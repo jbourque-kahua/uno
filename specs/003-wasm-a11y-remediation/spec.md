@@ -228,6 +228,12 @@ control with `AutomationId` + `LabeledBy` set. Fails before, passes after.
   not borrow the id as a name) (FR-018).
 - Control type absent from the role map and not in the factory switch → it must still emit a
   valid role or rely on a native-implicit one, never a bare invalid token (FR-020).
+- `Custom` landmark with no Name **and** no `LocalizedLandmarkType` → must not produce a bare
+  unlabeled `role="region"`; resolve a name or omit the landmark (FR-014).
+- `LocalizedLandmarkType` set on a `Main`/`Navigation`/`Search`/`Form` landmark → emitted as
+  `aria-roledescription` (not dropped), provided the element has an accessible name (FR-025).
+- `AutomationProperties.LandmarkType` changed after the element is mounted → the DOM role
+  updates (today the live-sync branch is dead) (FR-027).
 
 ## Requirements *(mandatory)*
 
@@ -272,8 +278,11 @@ control with `AutomationId` + `LabeledBy` set. Fails before, passes after.
 **ScrollViewer / body text (P3)**
 - **FR-013**: System MUST emit `role=region` for a ScrollViewer ONLY when it is actually
   scrollable AND has an accessible name; otherwise it MUST NOT be a landmark.
-- **FR-014**: System MUST set a meaningful `aria-label` on a region (never a concatenated
-  descendant-text dump).
+- **FR-014**: Every landmark/`region` (ScrollViewer→region, `AutomationLandmarkType`
+  landmarks, named groups) MUST have a meaningful accessible name (never a concatenated
+  descendant-text dump); a landmark/region MUST NOT be emitted unlabeled, and
+  `aria-roledescription` MUST NOT be emitted on an element that has no accessible name
+  (per ARIA, roledescription is not a substitute for a name).
 - **FR-015**: System MUST expose standalone body `TextBlock` text to AT per the chosen
   design (see research §6 — body-text decision), without reintroducing the pruning's
   DOM-bloat/nested-focusable problems.
@@ -308,15 +317,22 @@ control with `AutomationId` + `LabeledBy` set. Fails before, passes after.
   with live-sync.
 - **FR-024**: System MUST map `aria-orientation` for `Slider`/`ScrollBar` (replacing the
   non-standard `orient`/CSS approach).
-- **FR-025**: System MUST map `aria-roledescription` from `LocalizedControlType` (in
-  addition to the existing Custom-landmark source).
+- **FR-025**: System MUST source `aria-roledescription` completely: from
+  `LocalizedControlType` (currently unmapped) AND from `LocalizedLandmarkType` on **all**
+  landmark types — not only `Custom` (currently `LocalizedLandmarkType` is silently dropped
+  for `Main`/`Navigation`/`Search`/`Form`, a parity gap vs WinUI/UIA). Emission remains
+  gated on the element having an accessible name (FR-014).
 - **FR-026**: System MUST map `aria-level` from `AutomationProperties.Level` (distinct from
   `HeadingLevel`) for hierarchical items such as `TreeViewItem`.
 - **FR-027**: System MUST add live-sync for the currently creation-only/dead attributes
   (`FullDescription`, `IsRequiredForForm`, `HeadingLevel`, `IsDialog`/`aria-modal`,
-  `LiveSetting`, `AcceleratorKey`/`AccessKey`) — including chaining the WASM
-  `NotifyPropertyChangedEventCore` override to base or a generalized property→attribute map
-  (ties to FR-010) — and MUST preserve `FullDescription` > `HelpText` precedence on update.
+  `LiveSetting`, `AcceleratorKey`/`AccessKey`, **`LandmarkType`/`LocalizedLandmarkType`**) —
+  including chaining the WASM `NotifyPropertyChangedEventCore` override to base or a
+  generalized property→attribute map (ties to FR-010) — and MUST preserve
+  `FullDescription` > `HelpText` precedence on update. NOTE: several of these attached
+  properties (e.g. `LandmarkType`, `LocalizedLandmarkType`, `HelpText`) register **no
+  changed-callback** and raise **no** automation event today, so their existing live-sync
+  branches are unreachable dead code — wiring the changed-callback/raise is part of this work.
 - **FR-028**: System MUST correct value semantics: do not inject `posinset` "N of M" text
   into `aria-label` for roles that don't support it; drive `aria-haspopup` from the C#
   value (not TS hardcoding); map `AccessKey` to the HTML `accesskey` attribute rather than

@@ -86,7 +86,7 @@ specs/003-wasm-a11y-remediation/
 
 ```text
 src/Uno.UI/Accessibility/
-└── AriaMapper.cs                         # RadioButton initial Checked; heading level; populate LabelledBy; LocalizedControlType→roledescription; Level; aria-invalid/orientation; role normalization (MODIFY)
+└── AriaMapper.cs                         # RadioButton initial Checked; heading level; populate LabelledBy; LocalizedControlType + LocalizedLandmarkType(all landmarks)→roledescription; Level; aria-invalid/orientation; role normalization (MODIFY)
 
 src/Uno.UI/UI/Xaml/Automation/
 └── AutomationProperties.uno.cs           # FindHtmlRole invalid-token normalization (shared, also fixes native); AutomationId→DOM id (MODIFY)
@@ -114,6 +114,7 @@ src/Uno.UI.RuntimeTests/Tests/Windows_UI_Xaml_Automation/
 ├── Given_AccessibleScrollViewer.cs       # Region gating/label DOM tests (NEW)
 ├── Given_AccessibleTabindex.cs           # Cross-cutting: non-interactive ≠ tab stop (NEW)
 ├── Given_AccessibleAria.cs               # ARIA attr correctness: AutomationId/LabeledBy/role/IDREF/generic-parity (NEW)
+├── Given_AccessibleLandmark.cs           # Landmark role + LocalizedLandmarkType→roledescription + region-must-have-name (NEW)
 └── Given_AccessibleListView.cs           # Re-enable composite tabindex/roving (MODIFY)
 ```
 
@@ -149,9 +150,12 @@ Ordered by severity and independent testability (each phase is shippable):
      roles (FR-020, shared C# — validate native path too); factory↔generic attribute parity
      (FR-021); dangling-IDREF integrity (FR-022). Tests: `Given_AccessibleAria` (NEW).
    - **G2 (P2):** `aria-invalid` (FR-023), `aria-orientation` (FR-024),
-     `LocalizedControlType`→`roledescription` (FR-025), standalone `Level` (FR-026), the
-     missing live-sync branches (FR-027, dovetails with Phase D / FR-010), value-semantics
-     corrections (FR-028), and the lower-priority completeness gaps (FR-029).
+     `aria-roledescription` from `LocalizedControlType` **and** `LocalizedLandmarkType` on
+     all landmark types (FR-025), landmark/region-must-have-a-name + no-roledescription-
+     without-name (FR-014), standalone `Level` (FR-026), the missing live-sync branches
+     incl. `LandmarkType`/`LocalizedLandmarkType` — which also need a changed-callback wired
+     (FR-027, dovetails with Phase D / FR-010), value-semantics corrections (FR-028), and the
+     lower-priority completeness gaps (FR-029). Tests: `Given_AccessibleLandmark` (NEW).
 
 Phases A, B, and G1 are P1 and largely independent — they can land first/parallel. C–E build
 on B's gating mechanism; G2 dovetails with D's generalized property→attribute map. F runs
