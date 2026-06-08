@@ -262,6 +262,75 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Automation
 		}
 
 		/// <summary>
+		/// WASM DOM seam: when a TextBlock's accessible name is derived from its Text (no explicit
+		/// AutomationProperties.Name) and the Text changes at runtime, the semantic element's
+		/// aria-label must follow. This reproduces the live status-text defect ("Ready" -> "Fake
+		/// button tapped") where the AOM kept the stale name: the source never raised a Name
+		/// PropertyChanged event, so the re-sync handler never fired. TextBlock.OnTextChanged now
+		/// raises NameProperty when the name comes from Text; the router updates aria-label.
+		/// Fails before the fix (aria-label stays "Ready"), passes after.
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		[PlatformCondition(ConditionMode.Include, RuntimeTestPlatforms.SkiaWasm)]
+		public async Task When_LiveRegion_TextBlock_Text_Changes_Then_AriaLabel_Updates()
+		{
+			var textBlock = new TextBlock { Text = "Ready" };
+			AutomationProperties.SetLiveSetting(textBlock, AutomationLiveSetting.Polite);
+			AutomationProperties.SetAutomationId(textBlock, "ButtonsStatus");
+
+			await UITestHelper.Load(textBlock);
+			textBlock.GetOrCreateAutomationPeer();
+
+			EnableAccessibilityThroughDom();
+			await UITestHelper.WaitFor(() => SemanticElementExists(textBlock), timeoutMS: 5000, message: "Timed out waiting for the semantic element to be created.");
+			await UITestHelper.WaitForIdle();
+
+			Assert.AreEqual("Ready", GetSemanticAttribute(textBlock, "aria-label"), "The initial accessible name (from Text) must be emitted as aria-label.");
+
+			textBlock.Text = "Fake button tapped";
+			await UITestHelper.WaitForIdle();
+			await UITestHelper.WaitFor(() => GetSemanticAttribute(textBlock, "aria-label") == "Fake button tapped", timeoutMS: 5000,
+				message: "Timed out waiting for aria-label to follow the runtime Text change.");
+
+			Assert.AreEqual("Fake button tapped", GetSemanticAttribute(textBlock, "aria-label"),
+				"A runtime Text change must update the semantic element's aria-label when the accessible name is derived from Text.");
+		}
+
+		/// <summary>
+		/// WASM DOM seam: same Name-from-Text propagation as above, but for a NON-live TextBlock
+		/// (kept as a semantic node via an explicit LandmarkType, which takes the generic path and
+		/// therefore carries an aria-label). Confirms the fix is not scoped to live regions: any
+		/// TextBlock whose accessible name is derived from Text must re-sync aria-label when the
+		/// Text changes. Fails before the fix (aria-label stays "Initial"), passes after.
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		[PlatformCondition(ConditionMode.Include, RuntimeTestPlatforms.SkiaWasm)]
+		public async Task When_NonLive_TextBlock_Text_Changes_Then_AriaLabel_Updates()
+		{
+			var textBlock = new TextBlock { Text = "Initial" };
+			AutomationProperties.SetLandmarkType(textBlock, AutomationLandmarkType.Custom);
+
+			await UITestHelper.Load(textBlock);
+			textBlock.GetOrCreateAutomationPeer();
+
+			EnableAccessibilityThroughDom();
+			await UITestHelper.WaitFor(() => SemanticElementExists(textBlock), timeoutMS: 5000, message: "Timed out waiting for the semantic element to be created.");
+			await UITestHelper.WaitForIdle();
+
+			Assert.AreEqual("Initial", GetSemanticAttribute(textBlock, "aria-label"), "The initial accessible name (from Text) must be emitted as aria-label.");
+
+			textBlock.Text = "Updated";
+			await UITestHelper.WaitForIdle();
+			await UITestHelper.WaitFor(() => GetSemanticAttribute(textBlock, "aria-label") == "Updated", timeoutMS: 5000,
+				message: "Timed out waiting for aria-label to follow the runtime Text change.");
+
+			Assert.AreEqual("Updated", GetSemanticAttribute(textBlock, "aria-label"),
+				"A runtime Text change must update the semantic element's aria-label when the accessible name is derived from Text.");
+		}
+
+		/// <summary>
 		/// T057 (FR-031, WASM): a virtualized container (NavigationView's MenuItemsHost ItemsRepeater)
 		/// whose items are already realized when accessibility is enabled must still emit a semantic node
 		/// per item. Before the build-time registration + backfill fix, CreateAOM pruned the repeater and
