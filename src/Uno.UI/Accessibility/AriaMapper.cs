@@ -459,16 +459,9 @@ public static class AriaMapper
 	/// <returns>True when the element can scroll along at least one axis.</returns>
 	public static bool IsScrollable(AutomationPeer? peer, UIElement? owner)
 	{
-		try
+		if (peer?.GetPattern(PatternInterface.Scroll) is IScrollProvider scrollProvider)
 		{
-			if (peer?.GetPattern(PatternInterface.Scroll) is IScrollProvider scrollProvider)
-			{
-				return scrollProvider.HorizontallyScrollable || scrollProvider.VerticallyScrollable;
-			}
-		}
-		catch
-		{
-			// Some peers may throw if the scroll pattern is queried before they are fully initialized.
+			return scrollProvider.HorizontallyScrollable || scrollProvider.VerticallyScrollable;
 		}
 
 		return owner?.IsScrollPort == true;
