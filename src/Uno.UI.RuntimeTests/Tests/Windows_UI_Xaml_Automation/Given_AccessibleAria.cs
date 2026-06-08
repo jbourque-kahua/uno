@@ -770,6 +770,88 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Automation
 				"aria-labelledby must be backfilled when the labeller is a following sibling built after the labelled control.");
 		}
 
+		/// <summary>
+		/// T026/FR-023 (mapper): a field marked AutomationProperties.IsDataValidForForm=false must map to
+		/// AriaAttributes.Invalid=true (inverted polarity); the default (valid) field must leave it false so
+		/// no aria-invalid is emitted. Asserts the AriaMapper side of the seam on Skia.
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		public async Task When_IsDataValidForForm_False_Then_AriaInvalid_Is_Set()
+		{
+			var invalidField = new TextBox { Text = "bad" };
+			AutomationProperties.SetIsDataValidForForm(invalidField, false);
+
+			var validField = new TextBox { Text = "good" };
+
+			await UITestHelper.Load(new StackPanel { Children = { invalidField, validField } });
+
+			var invalidPeer = FrameworkElementAutomationPeer.CreatePeerForElement(invalidField);
+			Assert.IsNotNull(invalidPeer, "Invalid field should have an automation peer");
+			Assert.IsTrue(AriaMapper.GetAriaAttributes(invalidPeer).Invalid, "aria-invalid must be set when IsDataValidForForm is false.");
+
+			var validPeer = FrameworkElementAutomationPeer.CreatePeerForElement(validField);
+			Assert.IsNotNull(validPeer, "Valid field should have an automation peer");
+			Assert.IsFalse(AriaMapper.GetAriaAttributes(validPeer).Invalid, "aria-invalid must NOT be set for a field with the default (valid) IsDataValidForForm.");
+		}
+
+		/// <summary>
+		/// T026/FR-023 (WASM DOM): an invalid form field must emit aria-invalid="true" on its semantic
+		/// element, while a valid (default) field must omit the attribute entirely. Validates the DOM side
+		/// of the inverted-polarity mapping end to end in the browser.
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		[PlatformCondition(ConditionMode.Include, RuntimeTestPlatforms.SkiaWasm)]
+		public async Task When_IsDataValidForForm_False_On_Wasm_Then_AriaInvalid_Attribute_Is_Set()
+		{
+			var invalidField = new TextBox { Text = "bad" };
+			AutomationProperties.SetIsDataValidForForm(invalidField, false);
+			var validField = new TextBox { Text = "good" };
+
+			await UITestHelper.Load(new StackPanel { Children = { invalidField, validField } });
+			invalidField.GetOrCreateAutomationPeer();
+			validField.GetOrCreateAutomationPeer();
+
+			EnableAccessibilityThroughDom();
+			await UITestHelper.WaitFor(() => SemanticElementExists(invalidField) && SemanticElementExists(validField), timeoutMS: 5000,
+				message: "Timed out waiting for the form-field semantic nodes.");
+			await UITestHelper.WaitForIdle();
+
+			Assert.AreEqual("true", GetSemanticAttribute(invalidField, "aria-invalid"), "An invalid form field must emit aria-invalid=true.");
+			Assert.AreEqual(string.Empty, GetSemanticAttribute(validField, "aria-invalid"), "A valid form field must NOT emit aria-invalid.");
+		}
+
+		/// <summary>
+		/// T026/FR-023 (WASM DOM live-sync): toggling IsDataValidForForm at runtime must add aria-invalid
+		/// when the field becomes invalid and remove it when it becomes valid again, within one update cycle.
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		[PlatformCondition(ConditionMode.Include, RuntimeTestPlatforms.SkiaWasm)]
+		public async Task When_IsDataValidForForm_Toggled_On_Wasm_Then_AriaInvalid_Live_Syncs()
+		{
+			var field = new TextBox { Text = "value" };
+
+			await UITestHelper.Load(field);
+			field.GetOrCreateAutomationPeer();
+
+			EnableAccessibilityThroughDom();
+			await UITestHelper.WaitFor(() => SemanticElementExists(field), timeoutMS: 5000,
+				message: "Timed out waiting for the form-field semantic node.");
+			await UITestHelper.WaitForIdle();
+
+			Assert.AreEqual(string.Empty, GetSemanticAttribute(field, "aria-invalid"), "A valid field must start without aria-invalid.");
+
+			AutomationProperties.SetIsDataValidForForm(field, false);
+			await UITestHelper.WaitForIdle();
+			Assert.AreEqual("true", GetSemanticAttribute(field, "aria-invalid"), "aria-invalid must be added when the field becomes invalid.");
+
+			AutomationProperties.SetIsDataValidForForm(field, true);
+			await UITestHelper.WaitForIdle();
+			Assert.AreEqual(string.Empty, GetSemanticAttribute(field, "aria-invalid"), "aria-invalid must be removed when the field becomes valid again.");
+		}
+
 		private static void EnableAccessibilityThroughDom()
 		{
 			InvokeBrowserJs("(function(){const button = document.getElementById('uno-enable-accessibility'); if (button) { button.click(); } return 'ok';})()");

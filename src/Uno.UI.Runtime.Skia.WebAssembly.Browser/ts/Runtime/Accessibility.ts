@@ -572,6 +572,21 @@ namespace Uno.UI.Runtime.Skia {
 		}
 
 		/**
+		 * Updates aria-invalid on a semantic element.
+		 * Screen readers announce the field as "invalid" when its value fails form validation.
+		 */
+		public static updateAriaInvalid(handle: number, invalid: boolean): void {
+			const element = Accessibility.getSemanticElementByHandle(handle);
+			if (element) {
+				if (invalid) {
+					element.setAttribute("aria-invalid", "true");
+				} else {
+					element.removeAttribute("aria-invalid");
+				}
+			}
+		}
+
+		/**
 		 * Updates aria-pressed on a toggle button semantic element.
 		 */
 		public static updateAriaPressed(handle: number, pressed: string): void {

@@ -139,6 +139,13 @@ internal static partial class SemanticElementFactory
 			NativeMethods.UpdateAriaRequired(handle, true);
 		}
 
+		// Apply aria-invalid for form fields with invalid values (WCAG 3.3.1, matches
+		// WinUI3 IsDataValidForForm with inverted polarity). Omitted when the field is valid.
+		if (created && attributes.Invalid)
+		{
+			NativeMethods.UpdateAriaInvalid(handle, true);
+		}
+
 		// Apply aria-live for live region elements (screen readers monitor content changes)
 		if (created && owner is not null)
 		{
@@ -1278,6 +1285,9 @@ internal static partial class SemanticElementFactory
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.Accessibility.updateAriaRequired")]
 		internal static partial void UpdateAriaRequired(IntPtr handle, bool required);
+
+		[JSImport("globalThis.Uno.UI.Runtime.Skia.Accessibility.updateAriaInvalid")]
+		internal static partial void UpdateAriaInvalid(IntPtr handle, bool invalid);
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.Accessibility.updateAriaPressed")]
 		internal static partial void UpdateAriaPressed(IntPtr handle, string pressed);

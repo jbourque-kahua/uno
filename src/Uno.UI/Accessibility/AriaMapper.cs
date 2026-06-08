@@ -208,6 +208,13 @@ public static class AriaMapper
 			attributes.Required = true;
 		}
 
+		// aria-invalid has inverted polarity: IsDataValidForForm() defaults to true (valid),
+		// so the attribute is emitted only when the field is explicitly marked invalid (WCAG 3.3.1).
+		if (!peer.IsDataValidForForm())
+		{
+			attributes.Invalid = true;
+		}
+
 		// VoiceOver uses landmark roles for rotor navigation
 		var landmarkType = peer.GetLandmarkType();
 		if (landmarkType != AutomationLandmarkType.None)
@@ -652,6 +659,9 @@ public class AriaAttributes
 
 	/// <summary>aria-required</summary>
 	public bool Required { get; set; }
+
+	/// <summary>aria-invalid (true when the form field's value is not valid for submission)</summary>
+	public bool Invalid { get; set; }
 
 	/// <summary>aria-valuenow</summary>
 	public double? ValueNow { get; set; }

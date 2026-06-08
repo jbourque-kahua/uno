@@ -1996,6 +1996,18 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 			}
 			UpdateHeadingLevel(element.Visual.Handle, level);
 		}
+		else if (automationProperty == AutomationElementIdentifiers.IsDataValidForFormProperty &&
+			TryGetPeerOwner(peer, out element))
+		{
+			// FR-023: live-sync aria-invalid on IsDataValidForForm change (inverted polarity —
+			// false means invalid). The attribute is removed when the field becomes valid again.
+			var invalid = !(bool)newValue;
+			if (this.Log().IsEnabled(LogLevel.Trace))
+			{
+				this.Log().Trace($"[A11y] PROP CHANGE: IsDataValidForForm handle={element.Visual.Handle} element={element.GetType().Name} invalid={invalid}");
+			}
+			NativeMethods.UpdateAriaInvalid(element.Visual.Handle, invalid);
+		}
 	}
 
 	public override void OnAutomationEvent(AutomationPeer peer, AutomationEvents eventId)
@@ -2316,6 +2328,9 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.Accessibility.updateAriaRequired")]
 		internal static partial void UpdateAriaRequired(IntPtr handle, bool required);
+
+		[JSImport("globalThis.Uno.UI.Runtime.Skia.Accessibility.updateAriaInvalid")]
+		internal static partial void UpdateAriaInvalid(IntPtr handle, bool invalid);
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.Accessibility.updateAriaPressed")]
 		internal static partial void UpdateAriaPressed(IntPtr handle, string pressed);

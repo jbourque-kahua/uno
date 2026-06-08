@@ -70,6 +70,21 @@ public sealed partial class AutomationProperties
 #endif
 	}
 
+	// FR-023: a runtime IsDataValidForForm change must reach assistive tech. The attached property is not
+	// polled by RaiseAutomaticPropertyChanges, so we raise the change here; the accessibility router then
+	// live-updates aria-invalid (inverted polarity — false means invalid).
+	private static void OnIsDataValidForFormChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs args)
+	{
+#if __SKIA__
+		if (AutomationPeer.AutomationPeerListener?.ListenerExistsHelper(AutomationEvents.PropertyChanged) == true &&
+			dependencyObject is UIElement element &&
+			element.GetOrCreateAutomationPeer() is { } peer)
+		{
+			AutomationPeer.AutomationPeerListener.NotifyPropertyChangedEvent(peer, AutomationElementIdentifiers.IsDataValidForFormProperty, args.OldValue, args.NewValue);
+		}
+#endif
+	}
+
 #if __WASM__ || __SKIA__
 	internal static string FindHtmlRole(UIElement uIElement)
 	{
