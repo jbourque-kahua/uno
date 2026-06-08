@@ -1476,7 +1476,6 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 		// landmark; axe "region must have a name"). main/navigation/search are top-level landmarks
 		// identified by role alone and keep their role even when unnamed.
 		var landmarkType = AutomationProperties.GetLandmarkType(child);
-		var hasLandmark = false;
 		if (landmarkType != AutomationLandmarkType.None)
 		{
 			var landmarkRole = AriaMapper.GetLandmarkRole(landmarkType);
@@ -1484,7 +1483,6 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 				&& (landmarkRole is not ("region" or "form") || hasAccessibleName))
 			{
 				role = landmarkRole;
-				hasLandmark = true;
 			}
 		}
 
