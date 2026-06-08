@@ -392,11 +392,6 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Automation
 			Assert.AreEqual("listbox", GetSemanticAttribute(comboBox, "aria-haspopup"), "A ComboBox must emit aria-haspopup=\"listbox\".");
 		}
 
-		private static void EnableAccessibilityThroughDom()
-		{
-			InvokeBrowserJs("(function(){const button = document.getElementById('uno-enable-accessibility'); if (button) { button.click(); } return 'ok';})()");
-		}
-
 		// Targets the exact semantic element for a given element via its visual handle, mirroring the
 		// id scheme used by the WASM runtime (uno-semantics-{handle}).
 		private static string GetSemanticElementId(UIElement element)
@@ -408,16 +403,6 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Automation
 		private static string GetSemanticAttribute(UIElement element, string attribute)
 			=> InvokeBrowserJs($"(function(){{const e = document.getElementById('{GetSemanticElementId(element)}'); return e ? (e.getAttribute('{attribute}') ?? '') : '';}})()");
 
-		private static string InvokeBrowserJs(string javascript)
-		{
-			var runtimeType = Type.GetType("Uno.Foundation.WebAssemblyRuntime, Uno.Foundation.Runtime.WebAssembly", throwOnError: false);
-			Assert.IsNotNull(runtimeType, "Unable to locate Uno.Foundation.WebAssemblyRuntime at runtime.");
-
-			var invokeJs = runtimeType.GetMethod("InvokeJS", new[] { typeof(string) });
-			Assert.IsNotNull(invokeJs, "Unable to locate Uno.Foundation.WebAssemblyRuntime.InvokeJS(string).");
-
-			return invokeJs.Invoke(obj: null, parameters: new object[] { javascript }) as string ?? string.Empty;
-		}
 #endif
 
 	}
