@@ -334,7 +334,8 @@ and FR-027 together constitute the live-sync coverage:*
   elements present in the AOM; dangling references MUST NOT be emitted, and MUST be cleared
   when the target is removed or selection is cleared.
 - **FR-023**: System MUST map `aria-invalid` from `IsDataValidForForm` (inverted polarity),
-  with live-sync.
+  with live-sync. (Invalid *state* only; associating the error-text element via
+  `aria-errormessage` is **out of scope** — see Out of Scope.)
 - **FR-024**: System MUST map `aria-orientation` for `Slider`/`ScrollBar` (replacing the
   non-standard `orient`/CSS approach).
 - **FR-025**: System MUST source `aria-roledescription` completely: from
@@ -455,3 +456,9 @@ and FR-027 together constitute the live-sync coverage:*
 - Native mobile accessibility (TalkBack / iOS VoiceOver).
 - New control patterns not already mapped in 001/002.
 - The debounce-queue activation (dead code) — note it; only address if it blocks a fix.
+- **`aria-errormessage`** (associating an invalid field with its error-text element). Uno conveys
+  invalid *state* via `aria-invalid` (FR-023) but not the error *message* association, because
+  WinUI exposes no source automation property for it; emitting it would require a Uno-specific
+  attached property (an `ErrorMessage` IDREF mirroring `LabeledBy`→`aria-labelledby`, gated on
+  `aria-invalid`). Deferred — the validation sample demonstrates `aria-required`/`aria-invalid`
+  only. (No `aria-errormessage` path exists in the codebase as of this writing.)
