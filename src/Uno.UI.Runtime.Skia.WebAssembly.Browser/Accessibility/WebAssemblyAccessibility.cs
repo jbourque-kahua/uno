@@ -1230,16 +1230,20 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 			return;
 		}
 
-		foreach (var (labelledHandle, labelledPeer) in _pendingLabelledBy)
+		// Re-resolve each deferred entry; emit + drop the ones whose labeller now has a semantic node,
+		// and KEEP the rest. OnChildAdded fires per-element, so a following-sibling labeller may not be
+		// registered when its labelled control drains — keeping the entry lets it resolve on the
+		// labeller's own (later) drain. ResolveLabelledByIdRef's HasSemanticElement gate still applies.
+		for (var i = _pendingLabelledBy.Count - 1; i >= 0; i--)
 		{
+			var (labelledHandle, labelledPeer) = _pendingLabelledBy[i];
 			var labelledById = SemanticElementFactory.ResolveLabelledByIdRef(labelledPeer);
 			if (labelledById is not null)
 			{
 				NativeMethods.UpdateAriaLabelledBy(labelledHandle, labelledById);
+				_pendingLabelledBy.RemoveAt(i);
 			}
 		}
-
-		_pendingLabelledBy.Clear();
 	}
 
 	/// <summary>
