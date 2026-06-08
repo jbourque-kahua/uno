@@ -449,6 +449,31 @@ public static class AriaMapper
 	}
 
 	/// <summary>
+	/// Resolves the element that provides the accessible label for a peer's owner via
+	/// <see cref="AutomationProperties.LabeledByProperty"/> (FR-019). Distinct from <see cref="ResolveLabel"/>:
+	/// this returns the *labeller element* (so its semantic node id can be referenced by
+	/// <c>aria-labelledby</c>), rather than flattening the label into an <c>aria-label</c> string.
+	/// </summary>
+	/// <param name="peer">The automation peer whose owner may carry an <c>AutomationProperties.LabeledBy</c>.</param>
+	/// <returns>The labelling <see cref="UIElement"/>, or <c>null</c> when none is set or the peer has no owner.</returns>
+	public static UIElement? ResolveLabelledByElement(AutomationPeer peer)
+	{
+		if (peer is not FrameworkElementAutomationPeer frameworkPeer)
+		{
+			return null;
+		}
+
+		var owner = frameworkPeer.Owner;
+		if (owner is null)
+		{
+			return null;
+		}
+
+		// GetLabeledBy is declared non-nullable but returns null when the attached property is unset.
+		return AutomationProperties.GetLabeledBy(owner);
+	}
+
+	/// <summary>
 	/// Determines whether an element is actually scrollable for accessibility purposes (FR-013).
 	/// A ScrollViewer that cannot scroll its content is not a meaningful <c>role=region</c> landmark.
 	/// Scrollability is taken from the <see cref="IScrollProvider"/> pattern when present, falling back

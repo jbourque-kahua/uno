@@ -1583,6 +1583,14 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 						: string.IsNullOrEmpty(acceleratorKey) ? accessKey : $"{acceleratorKey} {accessKey}";
 					NativeMethods.UpdateAriaKeyShortcuts(handle, keyShortcuts);
 				}
+
+				// aria-labelledby from AutomationProperties.LabeledBy, mirroring the factory path.
+				// Only emitted when the labeller has a semantic node (no dangling IDREF — FR-019/FR-022).
+				var labelledById = SemanticElementFactory.ResolveLabelledByIdRef(automationPeer);
+				if (labelledById is not null)
+				{
+					NativeMethods.UpdateAriaLabelledBy(handle, labelledById);
+				}
 			}
 
 			// Owner-scoped attributes sourced from AutomationProperties attached properties
@@ -1861,12 +1869,11 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 		else if (automationProperty == AutomationElementIdentifiers.LabeledByProperty &&
 			TryGetPeerOwner(peer, out element))
 		{
-			// Dynamic aria-labelledby: when LabeledBy changes after creation
-			var attributes = AriaMapper.GetAriaAttributes(peer);
-			if (!string.IsNullOrEmpty(attributes.LabelledBy))
-			{
-				NativeMethods.UpdateAriaLabelledBy(element.Visual.Handle, attributes.LabelledBy);
-			}
+			// Dynamic aria-labelledby: when LabeledBy changes after creation. Resolve the new
+			// labeller → its semantic id (guarded on HasSemanticElement); clear the attribute when
+			// the labeller was removed or is not semantic, so no dangling IDREF survives.
+			var labelledById = SemanticElementFactory.ResolveLabelledByIdRef(peer);
+			NativeMethods.UpdateAriaLabelledBy(element.Visual.Handle, labelledById ?? string.Empty);
 		}
 		else if (automationProperty == AutomationElementIdentifiers.DescribedByProperty &&
 			TryGetPeerOwner(peer, out element))

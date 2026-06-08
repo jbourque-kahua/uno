@@ -443,6 +443,82 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Automation
 				"An unnamed Custom (region) landmark must NOT emit a role (region requires a name).");
 		}
 
+		/// <summary>
+		/// T021 (FR-019, WASM): when AutomationProperties.LabeledBy points to an element that has its own
+		/// semantic node, the labelled control must emit aria-labelledby as an IDREF to that labeller's
+		/// uno-semantics-{handle} node — distinct from aria-label. The labeller (a Named TextBlock) is
+		/// placed first so its semantic node already exists when the labelled Button is built, so the
+		/// creation-time IDREF emits deterministically. Fails before T021 (LabelledBy was never populated),
+		/// passes after.
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		[PlatformCondition(ConditionMode.Include, RuntimeTestPlatforms.SkiaWasm)]
+		public async Task When_LabeledBy_Semantic_Element_Then_AriaLabelledBy_References_Labeller()
+		{
+			// Named TextBlock => kept as a semantic node (IsSemanticElement true). Placed first so its
+			// node exists before the labelled Button is built.
+			var labeller = new TextBlock { Text = "Email address" };
+			AutomationProperties.SetName(labeller, "Email address");
+
+			var labelled = new Button { Content = "Edit" };
+			AutomationProperties.SetLabeledBy(labelled, labeller);
+
+			var panel = new StackPanel();
+			panel.Children.Add(labeller);
+			panel.Children.Add(labelled);
+
+			await UITestHelper.Load(panel);
+			labeller.GetOrCreateAutomationPeer();
+			labelled.GetOrCreateAutomationPeer();
+
+			EnableAccessibilityThroughDom();
+			await UITestHelper.WaitFor(() => SemanticElementExists(labeller) && SemanticElementExists(labelled), timeoutMS: 5000,
+				message: "Timed out waiting for both the labeller and labelled semantic nodes.");
+			await UITestHelper.WaitForIdle();
+
+			var expectedIdRef = GetSemanticElementId(labeller);
+			Assert.AreEqual(expectedIdRef, GetSemanticAttribute(labelled, "aria-labelledby"),
+				"aria-labelledby must reference the labeller's uno-semantics-{handle} node.");
+		}
+
+		/// <summary>
+		/// T021 (FR-019/FR-022, WASM): aria-labelledby must NOT be a dangling IDREF. When LabeledBy points
+		/// to an element that has NO semantic node (an AccessibilityView=Raw Border is never emitted),
+		/// the labelled control must not carry an aria-labelledby attribute at all. Guards the
+		/// HasSemanticElement gate.
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		[PlatformCondition(ConditionMode.Include, RuntimeTestPlatforms.SkiaWasm)]
+		public async Task When_LabeledBy_NonSemantic_Element_Then_No_Dangling_AriaLabelledBy()
+		{
+			// AccessibilityView=Raw => excluded from the AT tree (IsSemanticElement false), so it has no
+			// uno-semantics node to reference.
+			var nonSemanticLabeller = new Border();
+			AutomationProperties.SetAccessibilityView(nonSemanticLabeller, AccessibilityView.Raw);
+
+			var labelled = new Button { Content = "Edit" };
+			AutomationProperties.SetLabeledBy(labelled, nonSemanticLabeller);
+
+			var panel = new StackPanel();
+			panel.Children.Add(nonSemanticLabeller);
+			panel.Children.Add(labelled);
+
+			await UITestHelper.Load(panel);
+			labelled.GetOrCreateAutomationPeer();
+
+			EnableAccessibilityThroughDom();
+			await UITestHelper.WaitFor(() => SemanticElementExists(labelled), timeoutMS: 5000,
+				message: "Timed out waiting for the labelled semantic node.");
+			await UITestHelper.WaitForIdle();
+
+			Assert.IsFalse(SemanticElementExists(nonSemanticLabeller),
+				"An AccessibilityView=Raw Border must not have a semantic node (test precondition).");
+			Assert.AreEqual(string.Empty, GetSemanticAttribute(labelled, "aria-labelledby"),
+				"aria-labelledby must not be emitted when the labeller has no semantic node (no dangling IDREF).");
+		}
+
 		private static void EnableAccessibilityThroughDom()
 		{
 			InvokeBrowserJs("(function(){const button = document.getElementById('uno-enable-accessibility'); if (button) { button.click(); } return 'ok';})()");

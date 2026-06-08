@@ -161,10 +161,18 @@ internal static partial class SemanticElementFactory
 			}
 		}
 
-		// Apply aria-labelledby when LabeledBy is set
-		if (created && !string.IsNullOrEmpty(attributes.LabelledBy))
+		// Apply aria-labelledby when AutomationProperties.LabeledBy resolves to a labeller that has
+		// its own semantic node. The IDREF is computed here (not in AriaMapper) because only the
+		// WASM layer can map the labeller UIElement → its uno-semantics-{handle} id and verify the
+		// node is actually present (no dangling IDREF — FR-019/FR-022). aria-labelledby is independent
+		// of aria-label: both can be present.
+		if (created)
 		{
-			NativeMethods.UpdateAriaLabelledBy(handle, attributes.LabelledBy);
+			var labelledById = ResolveLabelledByIdRef(peer);
+			if (labelledById is not null)
+			{
+				NativeMethods.UpdateAriaLabelledBy(handle, labelledById);
+			}
 		}
 
 		// Apply relationship attributes (aria-describedby, aria-controls, aria-flowto)
@@ -1145,6 +1153,32 @@ internal static partial class SemanticElementFactory
 			// Unknown/invalid LCID — skip rather than emitting a bogus lang attribute.
 			return null;
 		}
+	}
+
+	/// <summary>
+	/// Resolves the <c>aria-labelledby</c> IDREF for a peer from its owner's
+	/// <see cref="AutomationProperties.LabeledByProperty"/> (FR-019). Returns the labeller's
+	/// <c>uno-semantics-{handle}</c> id only when the labeller has a real semantic node in the AOM
+	/// (<see cref="WebAssemblyAccessibility.HasSemanticElement"/>), so a dangling IDREF is never
+	/// emitted (FR-022). Returns <c>null</c> when there is no labeller or the labeller is not semantic.
+	/// </summary>
+	/// <param name="peer">The automation peer whose owner may carry <c>AutomationProperties.LabeledBy</c>.</param>
+	/// <returns>The <c>uno-semantics-{handle}</c> id of the labeller, or <c>null</c>.</returns>
+	internal static string? ResolveLabelledByIdRef(AutomationPeer peer)
+	{
+		var labeller = AriaMapper.ResolveLabelledByElement(peer);
+		if (labeller is null)
+		{
+			return null;
+		}
+
+		var labellerHandle = labeller.Visual.Handle;
+		if (labellerHandle == IntPtr.Zero || !WebAssemblyAccessibility.Instance.HasSemanticElement(labellerHandle))
+		{
+			return null;
+		}
+
+		return "uno-semantics-" + labellerHandle;
 	}
 
 	/// <summary>
