@@ -490,7 +490,13 @@ namespace Uno.UI.Runtime.Skia {
 			Accessibility.debugLog(`[A11y] TS updateAriaLabel: handle=${handle} label='${automationId}'`);
 			const element = Accessibility.getSemanticElementByHandle(handle);
 			if (element) {
-				element.setAttribute("aria-label", automationId);
+				// Omit an empty/whitespace aria-label rather than emitting aria-label="" (which screen
+				// readers announce as "blank"); a nameless control must carry no aria-label attribute.
+				if (automationId && automationId.trim().length > 0) {
+					element.setAttribute("aria-label", automationId);
+				} else {
+					element.removeAttribute("aria-label");
+				}
 			}
 		}
 
