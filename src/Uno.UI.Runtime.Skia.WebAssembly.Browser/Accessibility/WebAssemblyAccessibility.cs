@@ -397,7 +397,10 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 
 			// Don't recurse into virtualized containers — their items are managed
 			// by VirtualizedSemanticRegion via ContainerContentChanging/ElementPrepared.
-			if (child is not (ListViewBase or ItemsRepeater) || !isChildSemantic)
+			// ComboBox dropdown items are realized as role="option" by the listbox region; recursing
+			// would also emit each item's content TextBlock as a standalone <p> (duplicate).
+			if (child is not ComboBoxItem &&
+				(child is not (ListViewBase or ItemsRepeater) || !isChildSemantic))
 			{
 				// Recurse into children — if this element was skipped,
 				// its children will be parented to the nearest semantic ancestor.
@@ -1175,7 +1178,9 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 		// The ComboBox dropdown Popup is a structureless role="dialog" wrapper; its only meaningful
 		// content (the options) lives in the listbox region. Suppress the empty dialog node so screen
 		// readers don't announce a contentless dialog.
-		if (element is Popup { TemplatedParent: ComboBox })
+		// Matched via the ComboBox's GetPopup() — a Popup template part does not reliably carry
+		// TemplatedParent, so suppress by identity against tracked ComboBoxes (IsComboBoxDropdownPopup).
+		if (element is Popup comboBoxPopup && IsComboBoxDropdownPopup(comboBoxPopup))
 		{
 			return false;
 		}
@@ -1419,6 +1424,14 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 		// Don't recurse into virtualized containers — their items are managed
 		// by VirtualizedSemanticRegion via ContainerContentChanging/ElementPrepared.
 		if (child is (ListViewBase or ItemsRepeater) && isSemantic)
+		{
+			return;
+		}
+
+		// ComboBox dropdown items are realized as role="option" by the listbox region
+		// (TryRealizeComboBoxItem above); don't recurse, or each item's content TextBlock would
+		// also emit as a standalone <p> alongside its option.
+		if (child is ComboBoxItem)
 		{
 			return;
 		}

@@ -170,6 +170,68 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Automation
 			}
 		}
 
+		/// <summary>
+		/// Regression for the listbox-fix residuals: an open ComboBox dropdown must NOT (a) re-emit each
+		/// option's content as a standalone <p> alongside its role=option, nor (b) leave a role=dialog Popup
+		/// wrapper around the options. Both are suppressed once the items live in the listbox region.
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		[PlatformCondition(ConditionMode.Include, RuntimeTestPlatforms.SkiaWasm)]
+		public async Task When_DropDown_Opened_Then_No_Duplicate_Option_Paragraphs_Nor_Dialog()
+		{
+			var comboBox = new ComboBox();
+			comboBox.Items.Add("Option A");
+			comboBox.Items.Add("Option B");
+			comboBox.Items.Add("Option C");
+			comboBox.SelectedIndex = 0;
+
+			try
+			{
+				await UITestHelper.Load(comboBox);
+				comboBox.GetOrCreateAutomationPeer();
+
+				EnableAccessibilityThroughDom();
+				await UITestHelper.WaitFor(
+					() => ComboBoxHeadExists(comboBox),
+					timeoutMS: 5000,
+					message: "Timed out waiting for the semantic combobox head element to be created.");
+
+				comboBox.IsDropDownOpen = true;
+				await UITestHelper.WaitForIdle();
+
+				await UITestHelper.WaitFor(
+					() => GetListBoxOptionCount(comboBox) == 3,
+					timeoutMS: 5000,
+					message: "Timed out waiting for the 3 dropdown options to be exposed under a role=listbox.");
+
+				Assert.AreEqual(
+					"0|0",
+					GetDuplicateParagraphsAndOptionDialogs(),
+					"Open dropdown must not duplicate option text as standalone <p>, nor wrap options in a role=dialog popup.");
+			}
+			finally
+			{
+				comboBox.IsDropDownOpen = false;
+				TestServices.WindowHelper.WindowContent = null;
+			}
+		}
+
+		// Returns "dupP|dialogs": count of standalone <p> whose text matches an option label (duplicate
+		// emission), and count of role=dialog nodes containing any role=option (un-suppressed popup).
+		// "0|0" once both residuals are fixed.
+		private static string GetDuplicateParagraphsAndOptionDialogs()
+		{
+			var js =
+				"(function(){" +
+				"var labels = ['Option A','Option B','Option C'];" +
+				"var dupP = Array.from(document.querySelectorAll('p')).filter(function(p){return labels.indexOf((p.textContent||'').trim()) >= 0;}).length;" +
+				"var dlg = Array.from(document.querySelectorAll('[role=dialog]')).filter(function(d){return d.querySelector('[role=option]') !== null;}).length;" +
+				"return String(dupP) + '|' + String(dlg);" +
+				"})()";
+			return InvokeBrowserJs(js);
+		}
+
 		private static string GetSemanticElementId(ComboBox comboBox)
 			=> "uno-semantics-" + ((long)comboBox.Visual.Handle).ToString(System.Globalization.CultureInfo.InvariantCulture);
 

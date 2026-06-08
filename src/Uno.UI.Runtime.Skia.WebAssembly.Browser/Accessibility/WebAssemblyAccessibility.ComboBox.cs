@@ -48,6 +48,25 @@ internal partial class WebAssemblyAccessibility
 		}
 	}
 
+	/// <summary>
+	/// True when <paramref name="popup"/> is the dropdown Popup of a tracked ComboBox. Matched by
+	/// identity against each ComboBox's <see cref="ComboBox.GetPopup"/> rather than the Popup's
+	/// TemplatedParent (a Popup template part does not reliably carry it), so the empty role="dialog"
+	/// wrapper can be suppressed in favour of the listbox region.
+	/// </summary>
+	private bool IsComboBoxDropdownPopup(Popup popup)
+	{
+		foreach (var comboBox in _trackedComboBoxes)
+		{
+			if (comboBox.GetPopup() == popup)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	private void OnComboBoxDropDownClosed(object? sender, object e)
 	{
 		if (sender is ComboBox comboBox)
