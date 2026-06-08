@@ -173,13 +173,22 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 	/// </summary>
 	private readonly HashSet<IntPtr> _prunedHandles = new();
 	/// <summary>
-	/// Controls carrying AutomationProperties.LabeledBy, recorded during the AOM build so their
-	/// aria-labelledby IDREF is resolved AFTER the whole tree exists (FR-019/FR-022). The inline
-	/// create-time resolution is order-dependent — the labeller's node may not be registered yet
-	/// when the labelled control is built (following sibling / Header child) — so it is re-resolved
-	/// at the end of CreateAOM, when every labeller is present.
+	/// Controls carrying AutomationProperties.LabeledBy whose aria-labelledby IDREF is resolved AFTER
+	/// the surrounding subtree exists (FR-019/FR-022). The inline create-time resolution is
+	/// order-dependent — the labeller's node may not be registered yet when the labelled control is
+	/// built (following sibling / Header child) — so it is re-resolved by a deferred drain once every
+	/// labeller is present: at the end of CreateAOM for the initial build, and at the end of the
+	/// outermost OnChildAdded call for panels loaded after accessibility is already enabled.
 	/// </summary>
 	private readonly List<(IntPtr Handle, AutomationPeer Peer)> _pendingLabelledBy = new();
+
+	/// <summary>
+	/// Reentrancy depth of <see cref="OnChildAdded"/>. OnChildAdded recurses through a whole subtree
+	/// synchronously, so the outermost call (depth returning to 0) is the point at which every labeller
+	/// in that subtree has been registered — the moment to drain <see cref="_pendingLabelledBy"/> so a
+	/// following-sibling labeller resolves order-independently on the dynamic path too.
+	/// </summary>
+	private int _onChildAddedDepth;
 
 	// Debounce timer infrastructure for DOM updates (FR-012: 100ms debounce)
 	private const int DebounceDelayMs = 100;
@@ -339,6 +348,7 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 			return;
 		}
 
+		_onChildAddedDepth++;
 		try
 		{
 			TrySubscribeScrollSource(child);
@@ -384,6 +394,18 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 					if (AddSemanticElement(semanticParent, child, index))
 					{
 						_semanticParentMap[childHandle] = semanticParent;
+
+						// FR-019/FR-022: defer aria-labelledby resolution on the dynamic path too. The
+						// inline resolution inside AddSemanticElement is order-dependent — a following-
+						// sibling labeller has not registered yet when this control is added — so record
+						// it and re-resolve when the outermost OnChildAdded subtree completes (below).
+						// The HasSemanticElement gate in ResolveLabelledByIdRef still applies at drain
+						// time, so no dangling IDREF is emitted.
+						if (AutomationProperties.GetLabeledBy(child) is not null
+							&& child.GetOrCreateAutomationPeer() is { } labelledPeer)
+						{
+							_pendingLabelledBy.Add((childHandle, labelledPeer));
+						}
 					}
 					else
 					{
@@ -418,6 +440,16 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 			if (this.Log().IsEnabled(LogLevel.Error))
 			{
 				this.Log().Error($"[A11y] OnChildAdded failed for {child.GetType().Name}: {ex.Message}", ex);
+			}
+		}
+		finally
+		{
+			// Outermost call complete: the whole added subtree (and any following-sibling labellers
+			// within it) is now registered, so re-resolve the deferred aria-labelledby IDREFs. Mirrors
+			// the CreateAOM drain, making the dynamic path order-independent (FR-019/FR-022).
+			if (--_onChildAddedDepth == 0)
+			{
+				DrainPendingLabelledBy();
 			}
 		}
 	}
@@ -696,6 +728,18 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 			else
 			{
 				var handle = containerVisual.Handle;
+
+				// FR-013/FR-014: a ScrollViewer's region eligibility depends on its scrollability,
+				// which is only known once its content extent has been computed during layout. When the
+				// AOM node was built via OnChildAdded (before layout), the ScrollViewer was not yet
+				// scrollable, so the region role was dropped (and a named ScrollViewer fell back to
+				// "group"). Re-evaluate the region gate now that a size/offset change has settled the
+				// layout, upgrading the node to role=region once it is genuinely scrollable and named.
+				if (containerVisual.Owner?.Target is UIElement changedElement)
+				{
+					TryUpdateScrollRegionRole(changedElement);
+				}
+
 				// T058: a previously-Collapsed element pruned at build/add time has no semantic node; now
 				// that it is visible again, re-emit it (and its now-visible subtree). No other post-build
 				// path creates a node (there is no show-counterpart to HideSemanticElement).
@@ -744,6 +788,45 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 					}
 				}
 			}
+		}
+	}
+
+	/// <summary>
+	/// Re-evaluates the <c>role=region</c> gate (FR-013/FR-014) for the <see cref="ScrollViewer"/> that
+	/// owns or is the nearest semantic ancestor of <paramref name="changedElement"/>, after a layout
+	/// change. The gate is layout-dependent (scrollability is only known once the content extent is
+	/// computed), but the AOM node may have been built via OnChildAdded before layout — at which point a
+	/// scrollable, named ScrollViewer is mis-emitted as <c>role=group</c>. This brings the live DOM role
+	/// in line with the current scrollable+named state once layout has settled.
+	/// </summary>
+	private void TryUpdateScrollRegionRole(UIElement changedElement)
+	{
+		// Find the ScrollViewer that owns this layout change (itself or the nearest ancestor that has a
+		// semantic node). Content growth fires for descendants, so a bounded ancestor walk is needed.
+		var current = changedElement;
+		while (current is not null)
+		{
+			if (current is ScrollViewer scrollViewer)
+			{
+				if (!HasSemanticElement(scrollViewer.Visual.Handle))
+				{
+					return;
+				}
+
+				var peer = scrollViewer.GetOrCreateAutomationPeer();
+
+				// Only the named+scrollable case is upgraded here. The unnamed / non-scrollable cases are
+				// already correct from the build-time gate (a bare <div> with no role), and an empty-string
+				// role would be an invalid attribute — so we never write a role in those cases.
+				if (AriaMapper.QualifiesAsNamedScrollRegion(peer, scrollViewer))
+				{
+					NativeMethods.UpdateLandmarkRole(scrollViewer.Visual.Handle, "region");
+				}
+
+				return;
+			}
+
+			current = current.GetParent() as UIElement;
 		}
 	}
 
@@ -1125,6 +1208,28 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 		// FR-019/FR-022: now that the full AOM exists, every labeller with a semantic node is
 		// registered. Re-resolve the deferred aria-labelledby IDREFs so emission is order-independent
 		// (covers labellers built after the labelled control). HasSemanticElement still gates each one.
+		DrainPendingLabelledBy();
+
+		if (this.Log().IsEnabled(LogLevel.Debug))
+		{
+			this.Log().Debug($"[A11y] CreateAOM complete");
+		}
+	}
+
+	/// <summary>
+	/// Re-resolves every deferred aria-labelledby IDREF now that more of the tree exists, then clears
+	/// the queue. Shared by the CreateAOM drain and the OnChildAdded drain so both paths are
+	/// order-independent (a labeller built after the labelled control still resolves). Each entry is
+	/// gated by <see cref="SemanticElementFactory.ResolveLabelledByIdRef"/>, which only emits when the
+	/// labeller actually has a semantic node — so a dangling IDREF is never written (FR-019/FR-022).
+	/// </summary>
+	private void DrainPendingLabelledBy()
+	{
+		if (_pendingLabelledBy.Count == 0)
+		{
+			return;
+		}
+
 		foreach (var (labelledHandle, labelledPeer) in _pendingLabelledBy)
 		{
 			var labelledById = SemanticElementFactory.ResolveLabelledByIdRef(labelledPeer);
@@ -1133,12 +1238,8 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 				NativeMethods.UpdateAriaLabelledBy(labelledHandle, labelledById);
 			}
 		}
-		_pendingLabelledBy.Clear();
 
-		if (this.Log().IsEnabled(LogLevel.Debug))
-		{
-			this.Log().Debug($"[A11y] CreateAOM complete");
-		}
+		_pendingLabelledBy.Clear();
 	}
 
 	/// <summary>
@@ -1290,7 +1391,42 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 			return false;
 		}
 
+		// A TextBlock inside a ComboBox carries text that is already conveyed by a richer role, so
+		// emitting it as a standalone <p> would duplicate the announcement. ExternalOnChildAdded fires
+		// per-element (not only via recursion), so the ComboBoxItem recursion-stop alone cannot prune
+		// these — gate on the visual ancestor chain instead:
+		//  - under a ComboBoxItem: the dropdown option's label is carried by its role="option" in the
+		//    listbox region (TryRealizeComboBoxItem).
+		//  - under a ComboBox (but no intervening ComboBoxItem): the head faceplate's selected value is
+		//    conveyed by the combobox role/value (aria-activedescendant / the head's name).
+		if (HasComboBoxOrComboBoxItemAncestor(element))
+		{
+			return false;
+		}
+
 		return !IsAbsorbedByAncestorName(element, text);
+	}
+
+	/// <summary>
+	/// True when the visual ancestor chain of <paramref name="element"/> includes a ComboBoxItem
+	/// (dropdown option) or a ComboBox (head faceplate). Such text is already conveyed by the
+	/// listbox option / combobox role, so a plain descendant TextBlock must not be re-emitted as a
+	/// standalone &lt;p&gt;.
+	/// </summary>
+	private static bool HasComboBoxOrComboBoxItemAncestor(UIElement element)
+	{
+		var node = element.GetParent() as UIElement;
+		while (node is not null)
+		{
+			if (node is ComboBoxItem or ComboBox)
+			{
+				return true;
+			}
+
+			node = node.GetParent() as UIElement;
+		}
+
+		return false;
 	}
 
 	private static bool IsAbsorbedByAncestorName(UIElement element, string ownText)
