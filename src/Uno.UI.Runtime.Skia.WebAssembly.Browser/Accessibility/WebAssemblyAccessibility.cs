@@ -172,6 +172,14 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 	/// no other post-build path creates a node and there is no show-counterpart to hide.
 	/// </summary>
 	private readonly HashSet<IntPtr> _prunedHandles = new();
+	/// <summary>
+	/// Controls carrying AutomationProperties.LabeledBy, recorded during the AOM build so their
+	/// aria-labelledby IDREF is resolved AFTER the whole tree exists (FR-019/FR-022). The inline
+	/// create-time resolution is order-dependent — the labeller's node may not be registered yet
+	/// when the labelled control is built (following sibling / Header child) — so it is re-resolved
+	/// at the end of CreateAOM, when every labeller is present.
+	/// </summary>
+	private readonly List<(IntPtr Handle, AutomationPeer Peer)> _pendingLabelledBy = new();
 
 	// Debounce timer infrastructure for DOM updates (FR-012: 100ms debounce)
 	private const int DebounceDelayMs = 100;
@@ -1106,6 +1114,19 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 			BuildSemanticsTreeRecursive(rootHandle, child, depth: 1);
 		}
 
+		// FR-019/FR-022: now that the full AOM exists, every labeller with a semantic node is
+		// registered. Re-resolve the deferred aria-labelledby IDREFs so emission is order-independent
+		// (covers labellers built after the labelled control). HasSemanticElement still gates each one.
+		foreach (var (labelledHandle, labelledPeer) in _pendingLabelledBy)
+		{
+			var labelledById = SemanticElementFactory.ResolveLabelledByIdRef(labelledPeer);
+			if (labelledById is not null)
+			{
+				NativeMethods.UpdateAriaLabelledBy(labelledHandle, labelledById);
+			}
+		}
+		_pendingLabelledBy.Clear();
+
 		if (this.Log().IsEnabled(LogLevel.Debug))
 		{
 			this.Log().Debug($"[A11y] CreateAOM complete");
@@ -1351,6 +1372,16 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 			{
 				this.Log().Warn($"[A11y] AddSemanticElement returned false for {child.GetType().Name} handle={handle}");
 			}
+		}
+
+		// FR-019/FR-022: defer aria-labelledby resolution. The labeller's semantic node may not be
+		// registered yet at this control's create time (a following sibling or a Header/template child
+		// registers after the labelled control), so record the control and re-resolve at the end of
+		// CreateAOM. The HasSemanticElement gate still applies there, so no dangling IDREF is emitted.
+		if (_isCreatingAOM && _semanticParentMap.ContainsKey(handle) && AutomationProperties.GetLabeledBy(child) is not null
+			&& child.GetOrCreateAutomationPeer() is { } labelledPeer)
+		{
+			_pendingLabelledBy.Add((handle, labelledPeer));
 		}
 
 		// Register virtualized containers (and backfill their already-realized items) at AOM-build

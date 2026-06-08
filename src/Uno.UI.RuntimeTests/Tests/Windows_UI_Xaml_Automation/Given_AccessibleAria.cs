@@ -734,6 +734,42 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Automation
 				"An authored LocalizedControlType must surface as aria-roledescription.");
 		}
 
+		/// <summary>
+		/// T021 (FR-019, WASM) regression: aria-labelledby must resolve even when the labeller is built
+		/// AFTER the labelled control (a following sibling). Create-time resolution is order-dependent —
+		/// the labeller's node isn't registered yet — so a deferred pass at the end of CreateAOM re-resolves
+		/// it. Fails before the backfill (aria-labelledby absent), passes after.
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		[PlatformCondition(ConditionMode.Include, RuntimeTestPlatforms.SkiaWasm)]
+		public async Task When_LabeledBy_Following_Sibling_Then_AriaLabelledBy_Backfilled()
+		{
+			// Labelled control is added FIRST; its labeller is a following sibling built afterwards, so the
+			// create-time gate (labeller not yet registered) is missed and only the deferred drain emits it.
+			var labelled = new Button { Content = "Edit" };
+			var labeller = new TextBlock { Text = "Email address" };
+			AutomationProperties.SetName(labeller, "Email address");
+			AutomationProperties.SetLabeledBy(labelled, labeller);
+
+			var panel = new StackPanel();
+			panel.Children.Add(labelled);
+			panel.Children.Add(labeller);
+
+			await UITestHelper.Load(panel);
+			labeller.GetOrCreateAutomationPeer();
+			labelled.GetOrCreateAutomationPeer();
+
+			EnableAccessibilityThroughDom();
+			await UITestHelper.WaitFor(() => SemanticElementExists(labeller) && SemanticElementExists(labelled), timeoutMS: 5000,
+				message: "Timed out waiting for both the labeller and labelled semantic nodes.");
+			await UITestHelper.WaitForIdle();
+
+			var expectedIdRef = GetSemanticElementId(labeller);
+			Assert.AreEqual(expectedIdRef, GetSemanticAttribute(labelled, "aria-labelledby"),
+				"aria-labelledby must be backfilled when the labeller is a following sibling built after the labelled control.");
+		}
+
 		private static void EnableAccessibilityThroughDom()
 		{
 			InvokeBrowserJs("(function(){const button = document.getElementById('uno-enable-accessibility'); if (button) { button.click(); } return 'ok';})()");
