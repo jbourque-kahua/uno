@@ -685,6 +685,55 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Automation
 				"aria-atomic must NOT be force-set on a live region (FR-028 — browser default applies).");
 		}
 
+		/// <summary>
+		/// T028 (FR-025, WASM): aria-roledescription must NOT restate the default role. A named Button with
+		/// no authored AutomationProperties.LocalizedControlType must carry no aria-roledescription (the peer
+		/// GetLocalizedControlType() defaults to "button" — emitting that is an ARIA anti-pattern). Only an
+		/// explicitly-authored localized type yields a roledescription.
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		[PlatformCondition(ConditionMode.Include, RuntimeTestPlatforms.SkiaWasm)]
+		public async Task When_Named_Control_Without_Authored_LocalizedType_Then_No_RoleDescription()
+		{
+			var button = new Button { Content = "Save" };
+			AutomationProperties.SetName(button, "Save");
+
+			await UITestHelper.Load(button);
+			await UITestHelper.WaitForIdle();
+			EnableAccessibilityThroughDom();
+			await UITestHelper.WaitFor(() => SemanticElementExists(button), timeoutMS: 5000,
+				message: "Timed out waiting for the Button semantic node.");
+			await UITestHelper.WaitForIdle();
+
+			Assert.AreEqual(string.Empty, GetSemanticAttribute(button, "aria-roledescription"),
+				"A named control with no authored LocalizedControlType must not emit aria-roledescription (no role restatement).");
+		}
+
+		/// <summary>
+		/// T028 (FR-025, WASM): an authored AutomationProperties.LocalizedControlType on a named control IS
+		/// surfaced as aria-roledescription (the authored value, not the default role name).
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		[PlatformCondition(ConditionMode.Include, RuntimeTestPlatforms.SkiaWasm)]
+		public async Task When_Named_Control_With_Authored_LocalizedType_Then_RoleDescription_Emitted()
+		{
+			var button = new Button { Content = "Play" };
+			AutomationProperties.SetName(button, "Play");
+			AutomationProperties.SetLocalizedControlType(button, "media button");
+
+			await UITestHelper.Load(button);
+			await UITestHelper.WaitForIdle();
+			EnableAccessibilityThroughDom();
+			await UITestHelper.WaitFor(() => SemanticElementExists(button), timeoutMS: 5000,
+				message: "Timed out waiting for the Button semantic node.");
+			await UITestHelper.WaitForIdle();
+
+			Assert.AreEqual("media button", GetSemanticAttribute(button, "aria-roledescription"),
+				"An authored LocalizedControlType must surface as aria-roledescription.");
+		}
+
 		private static void EnableAccessibilityThroughDom()
 		{
 			InvokeBrowserJs("(function(){const button = document.getElementById('uno-enable-accessibility'); if (button) { button.click(); } return 'ok';})()");

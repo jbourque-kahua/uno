@@ -1534,31 +1534,19 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 		{
 			var handle = child.Visual.Handle;
 
-			// aria-roledescription from the peer's localized type (FR-025): the LocalizedLandmarkType
-			// for ANY landmark (not just Custom), otherwise the LocalizedControlType.
-			// FR-014: aria-roledescription is NOT a substitute for an accessible name — never emit it
-			// on an unnamed element, so it is gated on hasAccessibleName.
+			// aria-roledescription from the AUTHORED AutomationProperties.LocalizedLandmarkType /
+			// LocalizedControlType attached properties (null when unset) — NOT the peer's
+			// GetLocalized*Type(), which DEFAULTS to the role name (e.g. "button") and would restate
+			// the role on every named control (an ARIA anti-pattern). FR-014: roledescription is also
+			// not a name substitute, so it is gated on hasAccessibleName.
 			if (hasAccessibleName)
 			{
-				string? roleDescription = null;
-				if (landmarkType != AutomationLandmarkType.None)
+				var roleDescription = landmarkType != AutomationLandmarkType.None
+					? AutomationProperties.GetLocalizedLandmarkType(child)
+					: null;
+				if (string.IsNullOrEmpty(roleDescription))
 				{
-					var localizedLandmarkType = automationPeer is not null
-						? automationPeer.GetLocalizedLandmarkType()
-						: AutomationProperties.GetLocalizedLandmarkType(child);
-					if (!string.IsNullOrEmpty(localizedLandmarkType))
-					{
-						roleDescription = localizedLandmarkType;
-					}
-				}
-
-				if (string.IsNullOrEmpty(roleDescription) && automationPeer is not null)
-				{
-					var localizedControlType = automationPeer.GetLocalizedControlType();
-					if (!string.IsNullOrEmpty(localizedControlType))
-					{
-						roleDescription = localizedControlType;
-					}
+					roleDescription = AutomationProperties.GetLocalizedControlType(child);
 				}
 
 				if (!string.IsNullOrEmpty(roleDescription))

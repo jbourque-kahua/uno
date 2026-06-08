@@ -215,15 +215,16 @@ public static class AriaMapper
 			attributes.LandmarkRole = GetLandmarkRole(landmarkType);
 		}
 
-		// aria-roledescription is sourced from the peer's localized type (FR-025): the
-		// LocalizedLandmarkType for ANY landmark (not just Custom — Main/Navigation/Search/Form
-		// can each carry one), otherwise the LocalizedControlType for non-landmark controls.
-		// Per ARIA, roledescription is NOT a name substitute (FR-014): only emit it when the
-		// element already has an accessible name, never on an unnamed element.
-		if (!string.IsNullOrEmpty(attributes.Label))
+		// aria-roledescription is sourced from the AUTHORED AutomationProperties.LocalizedLandmarkType /
+		// LocalizedControlType attached properties (null when unset) — NOT the peer's GetLocalized*Type(),
+		// which DEFAULTS to the role name (e.g. "button") and would restate the role on every named
+		// control, an ARIA anti-pattern. roledescription is also not a name substitute (FR-014/FR-025):
+		// emit it only when the element has an accessible name AND the app explicitly authored a type.
+		if (!string.IsNullOrEmpty(attributes.Label)
+			&& peer is FrameworkElementAutomationPeer { Owner: { } roleDescriptionOwner })
 		{
 			var localizedLandmarkType = landmarkType != AutomationLandmarkType.None
-				? peer.GetLocalizedLandmarkType()
+				? AutomationProperties.GetLocalizedLandmarkType(roleDescriptionOwner)
 				: null;
 			if (!string.IsNullOrEmpty(localizedLandmarkType))
 			{
@@ -231,7 +232,7 @@ public static class AriaMapper
 			}
 			else
 			{
-				var localizedControlType = peer.GetLocalizedControlType();
+				var localizedControlType = AutomationProperties.GetLocalizedControlType(roleDescriptionOwner);
 				if (!string.IsNullOrEmpty(localizedControlType))
 				{
 					attributes.RoleDescription = localizedControlType;
