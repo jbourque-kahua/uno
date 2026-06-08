@@ -1156,7 +1156,7 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 	/// Elements without an automation peer, ARIA role, or automation ID are purely structural
 	/// (e.g., Grid, Border, ContentPresenter) and are pruned to reduce DOM bloat.
 	/// </summary>
-	private static bool IsSemanticElement(UIElement element)
+	private bool IsSemanticElement(UIElement element)
 	{
 		// Elements with AccessibilityView="Raw" are excluded from the accessibility tree entirely.
 		// This matches WinUI3 behavior where Raw elements are not exposed to UIA.
