@@ -1403,6 +1403,15 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 		//    listbox region (TryRealizeComboBoxItem).
 		//  - under a ComboBox (but no intervening ComboBoxItem): the head faceplate's selected value is
 		//    conveyed by the combobox role/value (aria-activedescendant / the head's name).
+		// An ImplicitTextBlock is the auto-generated text of a presenting control's string content
+		// (a ComboBoxItem option, the combobox faceplate, a Button caption, …), so its text is always
+		// conveyed by that control — never standalone body text. The visual-parent walk below misses
+		// popup-hosted content (managed GetParent does not traverse the popup host), so gate on type.
+		if (element is ImplicitTextBlock)
+		{
+			return false;
+		}
+
 		if (HasComboBoxOrComboBoxItemAncestor(element))
 		{
 			return false;
