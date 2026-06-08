@@ -621,7 +621,8 @@ namespace Uno.UI.Runtime.Skia {
 
 			element.setAttribute('role', 'combobox');
 			element.setAttribute('aria-expanded', String(expanded));
-			element.setAttribute('aria-haspopup', 'listbox');
+			// aria-haspopup is applied post-create from the C# value (AriaAttributes.HasPopup),
+			// not hardcoded here (FR-028).
 			Accessibility.updateElementFocusability(element, isFocusable);
 
 			if (selectedValue) {

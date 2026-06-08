@@ -1534,16 +1534,36 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 		{
 			var handle = child.Visual.Handle;
 
-			// Custom landmark → aria-roledescription.
+			// aria-roledescription from the peer's localized type (FR-025): the LocalizedLandmarkType
+			// for ANY landmark (not just Custom), otherwise the LocalizedControlType.
 			// FR-014: aria-roledescription is NOT a substitute for an accessible name — never emit it
-			// on an unnamed element. Only emit it when the landmark itself was kept (i.e. the element
-			// has a name), so a roledescription always rides on a named landmark.
-			if (hasLandmark && landmarkType == AutomationLandmarkType.Custom)
+			// on an unnamed element, so it is gated on hasAccessibleName.
+			if (hasAccessibleName)
 			{
-				var localizedLandmarkType = AutomationProperties.GetLocalizedLandmarkType(child);
-				if (!string.IsNullOrEmpty(localizedLandmarkType))
+				string? roleDescription = null;
+				if (landmarkType != AutomationLandmarkType.None)
 				{
-					NativeMethods.UpdateAriaRoleDescription(handle, localizedLandmarkType);
+					var localizedLandmarkType = automationPeer is not null
+						? automationPeer.GetLocalizedLandmarkType()
+						: AutomationProperties.GetLocalizedLandmarkType(child);
+					if (!string.IsNullOrEmpty(localizedLandmarkType))
+					{
+						roleDescription = localizedLandmarkType;
+					}
+				}
+
+				if (string.IsNullOrEmpty(roleDescription) && automationPeer is not null)
+				{
+					var localizedControlType = automationPeer.GetLocalizedControlType();
+					if (!string.IsNullOrEmpty(localizedControlType))
+					{
+						roleDescription = localizedControlType;
+					}
+				}
+
+				if (!string.IsNullOrEmpty(roleDescription))
+				{
+					NativeMethods.UpdateAriaRoleDescription(handle, roleDescription);
 				}
 			}
 
@@ -1556,8 +1576,9 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 			}
 
 			// Generic elements that still expose ExpandCollapse / shortcut keys (e.g. Expander
-			// hosted inside a fallback role, custom controls) need aria-expanded / aria-keyshortcuts
-			// applied post-hoc. Factory paths handle their own creation-time wiring.
+			// hosted inside a fallback role, custom controls) need aria-expanded / aria-haspopup /
+			// aria-keyshortcuts / accesskey applied post-hoc. Factory paths handle their own
+			// creation-time wiring.
 			if (automationPeer is not null)
 			{
 				try
@@ -1567,6 +1588,20 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 						var expanded = expandCollapseProvider.ExpandCollapseState == ExpandCollapseState.Expanded ||
 									   expandCollapseProvider.ExpandCollapseState == ExpandCollapseState.PartiallyExpanded;
 						NativeMethods.UpdateExpandCollapseState(handle, expanded);
+
+						// aria-haspopup from the C# value (FR-028): the popup kind follows the control
+						// type, mirroring AriaMapper.GetAriaAttributes.
+						var controlType = automationPeer.GetAutomationControlType();
+						var hasPopup = controlType switch
+						{
+							AutomationControlType.ComboBox => "listbox",
+							AutomationControlType.Menu or AutomationControlType.MenuItem => "menu",
+							_ => null,
+						};
+						if (!string.IsNullOrEmpty(hasPopup))
+						{
+							NativeMethods.UpdateAriaHasPopup(handle, hasPopup);
+						}
 					}
 				}
 				catch
@@ -1574,14 +1609,18 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 					// Some peers throw if queried before fully initialized. Update will arrive via property change.
 				}
 
+				// aria-keyshortcuts from AcceleratorKey only; AccessKey maps to the HTML accesskey
+				// attribute, never conflated into aria-keyshortcuts (FR-028).
 				var acceleratorKey = automationPeer.GetAcceleratorKey();
-				var accessKey = automationPeer.GetAccessKey();
-				if (!string.IsNullOrEmpty(acceleratorKey) || !string.IsNullOrEmpty(accessKey))
+				if (!string.IsNullOrEmpty(acceleratorKey))
 				{
-					var keyShortcuts = string.IsNullOrEmpty(accessKey)
-						? acceleratorKey
-						: string.IsNullOrEmpty(acceleratorKey) ? accessKey : $"{acceleratorKey} {accessKey}";
-					NativeMethods.UpdateAriaKeyShortcuts(handle, keyShortcuts);
+					NativeMethods.UpdateAriaKeyShortcuts(handle, acceleratorKey);
+				}
+
+				var accessKey = automationPeer.GetAccessKey();
+				if (!string.IsNullOrEmpty(accessKey))
+				{
+					NativeMethods.SetAccessKey(handle, accessKey);
 				}
 
 				// aria-labelledby from AutomationProperties.LabeledBy, mirroring the factory path.
@@ -2266,6 +2305,12 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.Accessibility.updateAriaKeyShortcuts")]
 		internal static partial void UpdateAriaKeyShortcuts(IntPtr handle, string keyShortcuts);
+
+		[JSImport("globalThis.Uno.UI.Runtime.Skia.Accessibility.updateAriaHasPopup")]
+		internal static partial void UpdateAriaHasPopup(IntPtr handle, string hasPopup);
+
+		[JSImport("globalThis.Uno.UI.Runtime.Skia.Accessibility.setAccessKey")]
+		internal static partial void SetAccessKey(IntPtr handle, string accessKey);
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.Accessibility.updateAriaLive")]
 		internal static partial void UpdateAriaLive(IntPtr handle, string ariaLive);

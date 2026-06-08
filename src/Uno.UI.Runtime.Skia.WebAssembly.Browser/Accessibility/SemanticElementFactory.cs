@@ -123,25 +123,14 @@ internal static partial class SemanticElementFactory
 			NativeMethods.UpdateAriaRoleDescription(handle, attributes.RoleDescription);
 		}
 
-		// Apply aria-posinset/aria-setsize for element types whose ARIA role supports them
-		// (option, listitem, menuitem, tab, treeitem, row, radio).
-		// For other roles (e.g. button), screen readers ignore these attributes,
-		// so we append position info to the label instead.
-		if (created && attributes.PositionInSet is > 0 && attributes.SizeOfSet is > 0)
+		// Apply aria-posinset/aria-setsize ONLY for element types whose ARIA role supports them
+		// (option, listitem, menuitem, tab, treeitem, row, radio). For other roles (e.g. button)
+		// these are dropped — position MUST NOT be concatenated into aria-label (FR-028); doing so
+		// corrupts the accessible name and is not what posinset/setsize mean.
+		if (created && attributes.PositionInSet is > 0 && attributes.SizeOfSet is > 0 &&
+			SupportsAriaPositionInSet(elementType))
 		{
-			if (SupportsAriaPositionInSet(elementType))
-			{
-				NativeMethods.UpdatePositionInSet(handle, attributes.PositionInSet.Value, attributes.SizeOfSet.Value);
-			}
-			else
-			{
-				// Append position info to the label for roles that don't support aria-posinset
-				var label = attributes.Label ?? "";
-				var positionLabel = string.IsNullOrEmpty(label)
-					? $"{attributes.PositionInSet.Value} of {attributes.SizeOfSet.Value}"
-					: $"{label}, {attributes.PositionInSet.Value} of {attributes.SizeOfSet.Value}";
-				NativeMethods.UpdateAriaLabel(handle, positionLabel);
-			}
+			NativeMethods.UpdatePositionInSet(handle, attributes.PositionInSet.Value, attributes.SizeOfSet.Value);
 		}
 
 		// Apply aria-required for form fields (WCAG 3.3.2, matches WinUI3 IsRequiredForForm)
@@ -190,10 +179,24 @@ internal static partial class SemanticElementFactory
 			NativeMethods.UpdateExpandCollapseState(handle, attributes.Expanded.Value);
 		}
 
-		// Apply aria-keyshortcuts from AcceleratorKey / AccessKey (WinUI3 parity, ARIA 1.2).
+		// Apply aria-keyshortcuts from AcceleratorKey only (WinUI3 parity, ARIA 1.2).
 		if (created && !string.IsNullOrEmpty(attributes.KeyShortcuts))
 		{
 			NativeMethods.UpdateAriaKeyShortcuts(handle, attributes.KeyShortcuts);
+		}
+
+		// Apply aria-haspopup from the C# value (popup kind decided by AriaMapper from the
+		// ExpandCollapse pattern / control type), not hardcoded in TS (FR-028).
+		if (created && !string.IsNullOrEmpty(attributes.HasPopup))
+		{
+			NativeMethods.UpdateAriaHasPopup(handle, attributes.HasPopup);
+		}
+
+		// Apply the HTML accesskey attribute from AccessKey (mnemonic), kept separate from
+		// aria-keyshortcuts (FR-028).
+		if (created && !string.IsNullOrEmpty(attributes.AccessKey))
+		{
+			NativeMethods.SetAccessKey(handle, attributes.AccessKey);
 		}
 
 		// Apply aria-modal for IsDialog peers (the FocusTrap subsystem also sets this
@@ -1336,6 +1339,12 @@ internal static partial class SemanticElementFactory
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.Accessibility.updateAriaKeyShortcuts")]
 		internal static partial void UpdateAriaKeyShortcuts(IntPtr handle, string keyShortcuts);
+
+		[JSImport("globalThis.Uno.UI.Runtime.Skia.Accessibility.updateAriaHasPopup")]
+		internal static partial void UpdateAriaHasPopup(IntPtr handle, string hasPopup);
+
+		[JSImport("globalThis.Uno.UI.Runtime.Skia.Accessibility.setAccessKey")]
+		internal static partial void SetAccessKey(IntPtr handle, string accessKey);
 
 		[JSImport("globalThis.Uno.UI.Runtime.Skia.Accessibility.updateAriaModal")]
 		internal static partial void UpdateAriaModal(IntPtr handle, bool modal);

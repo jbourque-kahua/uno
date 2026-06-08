@@ -597,6 +597,38 @@ namespace Uno.UI.Runtime.Skia {
 		}
 
 		/**
+		 * Updates aria-haspopup on a semantic element from the C# value (FR-028).
+		 * The popup kind ("listbox", "menu", "dialog", …) is decided in C# from the control's
+		 * ExpandCollapse pattern / control type, never hardcoded in TS.
+		 */
+		public static updateAriaHasPopup(handle: number, hasPopup: string): void {
+			const element = Accessibility.getSemanticElementByHandle(handle);
+			if (element) {
+				if (hasPopup) {
+					element.setAttribute("aria-haspopup", hasPopup);
+				} else {
+					element.removeAttribute("aria-haspopup");
+				}
+			}
+		}
+
+		/**
+		 * Updates the HTML accesskey attribute on a semantic element (FR-028).
+		 * Sourced from AutomationProperties.AccessKey (a mnemonic, e.g. "F"). This is distinct
+		 * from aria-keyshortcuts (the AcceleratorKey activation shortcut).
+		 */
+		public static setAccessKey(handle: number, accessKey: string): void {
+			const element = Accessibility.getSemanticElementByHandle(handle);
+			if (element) {
+				if (accessKey) {
+					element.setAttribute("accesskey", accessKey);
+				} else {
+					element.removeAttribute("accesskey");
+				}
+			}
+		}
+
+		/**
 		 * Updates aria-modal on a semantic element.
 		 * Used for dialogs that should scope screen reader announcements.
 		 */
@@ -650,8 +682,12 @@ namespace Uno.UI.Runtime.Skia {
 		public static updateAriaLive(handle: number, ariaLive: string): void {
 			const element = Accessibility.getSemanticElementByHandle(handle);
 			if (element) {
+				// aria-atomic is intentionally NOT forced here (FR-028). Defaulting every live
+				// region to aria-atomic="true" makes screen readers re-announce the entire region
+				// on any change; the browser default (false — announce only changed nodes) is
+				// correct for the common status/log case. A region whose WinUI semantics require
+				// atomic announcement must opt in explicitly elsewhere.
 				element.setAttribute("aria-live", ariaLive);
-				element.setAttribute("aria-atomic", "true");
 			}
 		}
 

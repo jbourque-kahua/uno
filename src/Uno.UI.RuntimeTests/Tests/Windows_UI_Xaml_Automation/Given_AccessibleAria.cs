@@ -126,6 +126,80 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Automation
 				AriaMapper.GetSemanticElementType(peer, textBlock),
 				"A plain body TextBlock (no Name/Landmark/LiveSetting/AutomationId) must remain a bare Text element.");
 		}
+
+		/// <summary>
+		/// T028 (FR-025): aria-roledescription is sourced from the peer's LocalizedControlType for a
+		/// named non-landmark control. Previously only a Custom landmark's LocalizedLandmarkType produced
+		/// a roledescription; LocalizedControlType was silently dropped. Asserts the AriaMapper side.
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		public async Task When_Named_Control_Then_RoleDescription_From_LocalizedControlType()
+		{
+			const string localizedControlType = "custom widget";
+
+			var control = new ContentControl { Content = "Widget" };
+			AutomationProperties.SetName(control, "Widget");
+			AutomationProperties.SetLocalizedControlType(control, localizedControlType);
+
+			await UITestHelper.Load(control);
+
+			var peer = control.GetOrCreateAutomationPeer();
+			Assert.IsNotNull(peer, "Control should have an automation peer");
+
+			var attributes = AriaMapper.GetAriaAttributes(peer);
+			Assert.AreEqual(localizedControlType, attributes.RoleDescription,
+				"A named control must source aria-roledescription from its LocalizedControlType (FR-025).");
+		}
+
+		/// <summary>
+		/// T028 (FR-025/FR-014): aria-roledescription MUST NOT be emitted on an element with no accessible
+		/// name (it is not a name substitute). An unnamed control yields no RoleDescription even when its
+		/// LocalizedControlType is non-empty.
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		public async Task When_Unnamed_Control_Then_No_RoleDescription()
+		{
+			// A bare ContentControl with a LocalizedControlType but NO name/content → no accessible name.
+			var control = new ContentControl();
+			AutomationProperties.SetLocalizedControlType(control, "custom widget");
+
+			await UITestHelper.Load(control);
+
+			var peer = control.GetOrCreateAutomationPeer();
+			Assert.IsNotNull(peer, "Control should have an automation peer");
+
+			var attributes = AriaMapper.GetAriaAttributes(peer);
+			Assert.IsTrue(string.IsNullOrEmpty(attributes.Label), "Test control must be unnamed for this assertion.");
+			Assert.IsTrue(string.IsNullOrEmpty(attributes.RoleDescription),
+				"An unnamed element must NOT receive aria-roledescription (FR-014 — not a name substitute).");
+		}
+
+		/// <summary>
+		/// T031 (FR-028): AccessKey maps to AriaAttributes.AccessKey (→ HTML accesskey) and must NOT be
+		/// folded into KeyShortcuts (aria-keyshortcuts). AcceleratorKey alone drives KeyShortcuts.
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		public async Task When_AccessKey_And_AcceleratorKey_Then_Separated()
+		{
+			var button = new Button { Content = "Save" };
+			AutomationProperties.SetAcceleratorKey(button, "Ctrl+S");
+			AutomationProperties.SetAccessKey(button, "S");
+
+			await UITestHelper.Load(button);
+
+			var peer = button.GetOrCreateAutomationPeer();
+			Assert.IsNotNull(peer, "Button should have an automation peer");
+
+			var attributes = AriaMapper.GetAriaAttributes(peer);
+			Assert.AreEqual("Ctrl+S", attributes.KeyShortcuts, "aria-keyshortcuts must come from AcceleratorKey only.");
+			Assert.AreEqual("S", attributes.AccessKey, "AccessKey must map to the HTML accesskey value, not aria-keyshortcuts.");
+			Assert.IsFalse((attributes.KeyShortcuts ?? string.Empty).Contains("S", StringComparison.Ordinal) &&
+				(attributes.KeyShortcuts ?? string.Empty).Contains(" "),
+				"AccessKey must not be concatenated into aria-keyshortcuts.");
+		}
 #endif
 
 #if __SKIA__
@@ -517,6 +591,98 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Automation
 				"An AccessibilityView=Raw Border must not have a semantic node (test precondition).");
 			Assert.AreEqual(string.Empty, GetSemanticAttribute(labelled, "aria-labelledby"),
 				"aria-labelledby must not be emitted when the labeller has no semantic node (no dangling IDREF).");
+		}
+
+		/// <summary>
+		/// T028 (FR-025, WASM): a NAMED Custom landmark whose LocalizedLandmarkType is set must emit
+		/// aria-roledescription; an UNNAMED landmark must NOT (roledescription is not a name substitute,
+		/// FR-014). Asserts the DOM end of the broadened roledescription source.
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		[PlatformCondition(ConditionMode.Include, RuntimeTestPlatforms.SkiaWasm)]
+		public async Task When_Named_Landmark_Then_RoleDescription_Emitted_But_Unnamed_Omitted()
+		{
+			var named = new Border();
+			AutomationProperties.SetLandmarkType(named, AutomationLandmarkType.Custom);
+			AutomationProperties.SetName(named, "Filters");
+			AutomationProperties.SetLocalizedLandmarkType(named, "filter panel");
+
+			var unnamed = new Border();
+			AutomationProperties.SetLandmarkType(unnamed, AutomationLandmarkType.Custom);
+			AutomationProperties.SetLocalizedLandmarkType(unnamed, "filter panel");
+
+			var panel = new StackPanel();
+			panel.Children.Add(named);
+			panel.Children.Add(unnamed);
+
+			await UITestHelper.Load(panel);
+			await UITestHelper.WaitForIdle();
+			EnableAccessibilityThroughDom();
+			await UITestHelper.WaitFor(() => SemanticElementExists(named), timeoutMS: 5000,
+				message: "Timed out waiting for the named landmark semantic node.");
+			await UITestHelper.WaitForIdle();
+
+			Assert.AreEqual("filter panel", GetSemanticAttribute(named, "aria-roledescription"),
+				"A named Custom landmark must emit aria-roledescription from its LocalizedLandmarkType (FR-025).");
+			Assert.AreEqual(string.Empty, GetSemanticAttribute(unnamed, "aria-roledescription"),
+				"An unnamed landmark must NOT emit aria-roledescription (FR-014 — not a name substitute).");
+		}
+
+		/// <summary>
+		/// T031 (FR-028, WASM): position-in-set "N of M" must NEVER be concatenated into aria-label. A
+		/// plain Button carries posinset/setsize on its peer but role=button does not support
+		/// aria-posinset; the old code appended ", 2 of 3" to the label. Assert the label stays clean.
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		[PlatformCondition(ConditionMode.Include, RuntimeTestPlatforms.SkiaWasm)]
+		public async Task When_PositionInSet_On_NonSupporting_Role_Then_Label_Has_No_NofM()
+		{
+			var button = new Button { Content = "Next" };
+			AutomationProperties.SetName(button, "Next");
+			AutomationProperties.SetPositionInSet(button, 2);
+			AutomationProperties.SetSizeOfSet(button, 3);
+
+			await UITestHelper.Load(button);
+			await UITestHelper.WaitForIdle();
+			EnableAccessibilityThroughDom();
+			await UITestHelper.WaitFor(() => SemanticElementExists(button), timeoutMS: 5000,
+				message: "Timed out waiting for the Button semantic node.");
+			await UITestHelper.WaitForIdle();
+
+			var ariaLabel = GetSemanticAttribute(button, "aria-label");
+			Assert.AreEqual("Next", ariaLabel,
+				"aria-label must stay the resolved name; position 'N of M' must never be concatenated into it (FR-028).");
+			Assert.IsFalse(ariaLabel.Contains("of", StringComparison.OrdinalIgnoreCase),
+				"aria-label must not contain any 'N of M' position text (FR-028).");
+		}
+
+		/// <summary>
+		/// T031 (FR-028, WASM): a live region must NOT be force-set to aria-atomic="true". aria-live is
+		/// emitted but aria-atomic is left at the browser default (absent). Guards the removed force-set.
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		[PlatformCondition(ConditionMode.Include, RuntimeTestPlatforms.SkiaWasm)]
+		public async Task When_LiveRegion_Then_AriaLive_Set_But_No_AriaAtomic()
+		{
+			var status = new TextBlock { Text = "Ready" };
+			AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
+			AutomationProperties.SetName(status, "Status");
+
+			await UITestHelper.Load(status);
+			await UITestHelper.WaitForIdle();
+			status.GetOrCreateAutomationPeer();
+			EnableAccessibilityThroughDom();
+			await UITestHelper.WaitFor(() => SemanticElementExists(status), timeoutMS: 5000,
+				message: "Timed out waiting for the live-region semantic node.");
+			await UITestHelper.WaitForIdle();
+
+			Assert.AreEqual("polite", GetSemanticAttribute(status, "aria-live"),
+				"A LiveSetting=Polite element must emit aria-live=polite.");
+			Assert.AreEqual(string.Empty, GetSemanticAttribute(status, "aria-atomic"),
+				"aria-atomic must NOT be force-set on a live region (FR-028 — browser default applies).");
 		}
 
 		private static void EnableAccessibilityThroughDom()

@@ -213,13 +213,28 @@ public static class AriaMapper
 		if (landmarkType != AutomationLandmarkType.None)
 		{
 			attributes.LandmarkRole = GetLandmarkRole(landmarkType);
+		}
 
-			if (landmarkType == AutomationLandmarkType.Custom)
+		// aria-roledescription is sourced from the peer's localized type (FR-025): the
+		// LocalizedLandmarkType for ANY landmark (not just Custom — Main/Navigation/Search/Form
+		// can each carry one), otherwise the LocalizedControlType for non-landmark controls.
+		// Per ARIA, roledescription is NOT a name substitute (FR-014): only emit it when the
+		// element already has an accessible name, never on an unnamed element.
+		if (!string.IsNullOrEmpty(attributes.Label))
+		{
+			var localizedLandmarkType = landmarkType != AutomationLandmarkType.None
+				? peer.GetLocalizedLandmarkType()
+				: null;
+			if (!string.IsNullOrEmpty(localizedLandmarkType))
 			{
-				var localizedLandmarkType = peer.GetLocalizedLandmarkType();
-				if (!string.IsNullOrEmpty(localizedLandmarkType))
+				attributes.RoleDescription = localizedLandmarkType;
+			}
+			else
+			{
+				var localizedControlType = peer.GetLocalizedControlType();
+				if (!string.IsNullOrEmpty(localizedControlType))
 				{
-					attributes.RoleDescription = localizedLandmarkType;
+					attributes.RoleDescription = localizedControlType;
 				}
 			}
 		}
@@ -242,15 +257,20 @@ public static class AriaMapper
 			attributes.Level = (int)headingLevel;
 		}
 
-		// aria-keyshortcuts: WinUI3 surfaces both AcceleratorKey (e.g. "Ctrl+S") and AccessKey
-		// (mnemonic, e.g. "Alt+F"). NVDA, JAWS and VoiceOver announce key shortcuts when present.
+		// aria-keyshortcuts is sourced ONLY from AcceleratorKey (e.g. "Ctrl+S"), the activation
+		// shortcut NVDA/JAWS/VoiceOver announce. AccessKey is a mnemonic (e.g. "F" for Alt+F) and
+		// maps to the HTML `accesskey` attribute instead (FR-028) — conflating it into
+		// aria-keyshortcuts was a wrong-target mapping.
 		var acceleratorKey = peer.GetAcceleratorKey();
-		var accessKey = peer.GetAccessKey();
-		if (!string.IsNullOrEmpty(acceleratorKey) || !string.IsNullOrEmpty(accessKey))
+		if (!string.IsNullOrEmpty(acceleratorKey))
 		{
-			attributes.KeyShortcuts = string.IsNullOrEmpty(accessKey)
-				? acceleratorKey
-				: string.IsNullOrEmpty(acceleratorKey) ? accessKey : $"{acceleratorKey} {accessKey}";
+			attributes.KeyShortcuts = acceleratorKey;
+		}
+
+		var accessKey = peer.GetAccessKey();
+		if (!string.IsNullOrEmpty(accessKey))
+		{
+			attributes.AccessKey = accessKey;
 		}
 
 		// Pattern queries are wrapped in try-catch because some peers (e.g.,
@@ -677,8 +697,11 @@ public class AriaAttributes
 	/// <summary>aria-roledescription (custom role description for VoiceOver)</summary>
 	public string? RoleDescription { get; set; }
 
-	/// <summary>aria-keyshortcuts (formatted from AcceleratorKey / AccessKey)</summary>
+	/// <summary>aria-keyshortcuts (from AcceleratorKey only)</summary>
 	public string? KeyShortcuts { get; set; }
+
+	/// <summary>HTML accesskey attribute (from AccessKey mnemonic)</summary>
+	public string? AccessKey { get; set; }
 
 	/// <summary>aria-modal (true when the peer's IsDialog() is true)</summary>
 	public bool? Modal { get; set; }
