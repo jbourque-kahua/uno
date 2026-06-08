@@ -363,6 +363,9 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 			TryRegisterVirtualizedContainer(child);
 			// Detect ContentDialog for focus trapping
 			TryRegisterModalDialog(child);
+			// Detect ComboBox dropdowns so their options form a proper role="listbox"
+			TryRegisterComboBox(child);
+			TryRealizeComboBoxItem(child);
 
 			// Find the nearest semantic ancestor for this child
 			var semanticParent = FindSemanticParent(parent);
@@ -432,6 +435,8 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 
 			TryUnsubscribeScrollSource(child);
 			TryUnregisterVirtualizedContainer(child);
+			TryUnregisterComboBox(child);
+			TryUnrealizeComboBoxItem(child);
 
 			// Remove any children of this element first (they may be semantic even if parent isn't)
 			foreach (var childChild in child.GetChildren())
@@ -1158,6 +1163,23 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 			return false;
 		}
 
+		// ComboBox dropdown items are surfaced as role="option" under a dedicated role="listbox"
+		// region (see TryRealizeComboBoxItem). Emitting them through the generic path would orphan
+		// them under the Popup's role="dialog", which the browser invalidates (the option resolves
+		// to "paragraph"). Skip them here so the listbox region is their sole owner.
+		if (element is ComboBoxItem)
+		{
+			return false;
+		}
+
+		// The ComboBox dropdown Popup is a structureless role="dialog" wrapper; its only meaningful
+		// content (the options) lives in the listbox region. Suppress the empty dialog node so screen
+		// readers don't announce a contentless dialog.
+		if (element is Popup { TemplatedParent: ComboBox })
+		{
+			return false;
+		}
+
 		// TextBlock and RichTextBlock are static text elements that contribute their
 		// text content to parent elements via AriaMapper.ResolveLabel(). Including
 		// them as separate semantic elements creates:
@@ -1337,6 +1359,10 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 		Debug.Assert(IsAccessibilityEnabled);
 
 		TrySubscribeScrollSource(child);
+		// Subscribe ComboBoxes encountered during the initial walk, and realize any options
+		// for a dropdown that is already open when accessibility is enabled.
+		TryRegisterComboBox(child);
+		TryRealizeComboBoxItem(child);
 
 		// FR-032/T058: a Collapsed element (and its whole subtree) is not rendered — skip both
 		// emission and recursion so its descendants do not leak into the AT tree (WinUI: Collapsed
@@ -1847,8 +1873,16 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 				NativeMethods.UpdateRovingTabindex(IntPtr.Zero, element.Visual.Handle);
 
 				// Update aria-activedescendant on the parent container (combobox/listbox)
-				// so screen readers announce the active option without moving DOM focus
-				if (peer.GetParent() is FrameworkElementAutomationPeer { Owner: { } parentOwner })
+				// so screen readers announce the active option without moving DOM focus.
+				// A ComboBox option lives in a separate listbox subtree, so the relationship
+				// must be expressed on the combobox head (which carries the matching
+				// aria-controls), not on the option's automation parent.
+				if (element is ComboBoxItem comboBoxItem &&
+					ItemsControl.ItemsControlFromItemContainer(comboBoxItem) is ComboBox ownerComboBox)
+				{
+					NativeMethods.UpdateActiveDescendant(ownerComboBox.Visual.Handle, element.Visual.Handle);
+				}
+				else if (peer.GetParent() is FrameworkElementAutomationPeer { Owner: { } parentOwner })
 				{
 					NativeMethods.UpdateActiveDescendant(parentOwner.Visual.Handle, element.Visual.Handle);
 				}

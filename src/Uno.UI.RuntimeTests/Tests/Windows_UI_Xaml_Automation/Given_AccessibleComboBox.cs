@@ -119,6 +119,127 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Automation
 			Assert.AreEqual(AutomationControlType.ComboBox, controlType);
 		}
 
+#if __SKIA__
+		/// <summary>
+		/// Verifies that an open ComboBox dropdown exposes its options as a proper WAI-ARIA
+		/// listbox: a role="listbox" node referenced by the combobox head via aria-controls,
+		/// with the options parented under it (so the browser honors role="option" instead of
+		/// invalidating the orphaned options to "paragraph"), each carrying aria-posinset and
+		/// aria-setsize. Regression test for the pre-existing gap where ComboBox options were
+		/// emitted directly under the Popup's role="dialog" and were therefore unreachable.
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		[PlatformCondition(ConditionMode.Include, RuntimeTestPlatforms.SkiaWasm)]
+		public async Task When_DropDown_Opened_Then_Options_Form_Accessible_Listbox()
+		{
+			var comboBox = new ComboBox();
+			comboBox.Items.Add("Option A");
+			comboBox.Items.Add("Option B");
+			comboBox.Items.Add("Option C");
+			comboBox.SelectedIndex = 0;
+
+			try
+			{
+				await UITestHelper.Load(comboBox);
+				comboBox.GetOrCreateAutomationPeer();
+
+				EnableAccessibilityThroughDom();
+				await UITestHelper.WaitFor(
+					() => ComboBoxHeadExists(comboBox),
+					timeoutMS: 5000,
+					message: "Timed out waiting for the semantic combobox head element to be created.");
+
+				comboBox.IsDropDownOpen = true;
+				await UITestHelper.WaitForIdle();
+
+				await UITestHelper.WaitFor(
+					() => GetListBoxOptionCount(comboBox) == 3,
+					timeoutMS: 5000,
+					message: "Timed out waiting for the 3 dropdown options to be exposed under a role=listbox.");
+
+				Assert.AreEqual(
+					"ok",
+					VerifyOptionsParentedUnderListBox(comboBox),
+					"Options must be role=option direct children of the listbox referenced by the combobox head's aria-controls, each with aria-posinset/aria-setsize.");
+			}
+			finally
+			{
+				comboBox.IsDropDownOpen = false;
+				TestServices.WindowHelper.WindowContent = null;
+			}
+		}
+
+		private static string GetSemanticElementId(ComboBox comboBox)
+			=> "uno-semantics-" + ((long)comboBox.Visual.Handle).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+		private static bool ComboBoxHeadExists(ComboBox comboBox)
+		{
+			var id = GetSemanticElementId(comboBox);
+			return InvokeBrowserJs("(function(){return document.getElementById('" + id + "') ? '1' : '0';})()") == "1";
+		}
+
+		// Returns the number of role=option direct children of the listbox referenced by the
+		// combobox head's aria-controls, or a negative sentinel describing what was missing.
+		private static int GetListBoxOptionCount(ComboBox comboBox)
+		{
+			var id = GetSemanticElementId(comboBox);
+			var js =
+				"(function(){" +
+				"const head = document.getElementById('" + id + "');" +
+				"if (!head) { return '-1'; }" +
+				"const controls = head.getAttribute('aria-controls');" +
+				"if (!controls) { return '-2'; }" +
+				"const listbox = document.getElementById(controls);" +
+				"if (!listbox || listbox.getAttribute('role') !== 'listbox') { return '-3'; }" +
+				"return String(listbox.querySelectorAll(':scope > [role=\"option\"]').length);" +
+				"})()";
+			return int.TryParse(InvokeBrowserJs(js), out var count) ? count : -99;
+		}
+
+		// Returns "ok" when every option is a role=option direct child of the listbox and
+		// carries a valid aria-posinset/aria-setsize; otherwise a short diagnostic token.
+		private static string VerifyOptionsParentedUnderListBox(ComboBox comboBox)
+		{
+			var id = GetSemanticElementId(comboBox);
+			var js =
+				"(function(){" +
+				"const head = document.getElementById('" + id + "');" +
+				"if (!head) { return 'no-head'; }" +
+				"const controls = head.getAttribute('aria-controls');" +
+				"const listbox = controls ? document.getElementById(controls) : null;" +
+				"if (!listbox || listbox.getAttribute('role') !== 'listbox') { return 'no-listbox'; }" +
+				"const options = Array.from(listbox.querySelectorAll(':scope > [role=\"option\"]'));" +
+				"if (options.length === 0) { return 'no-options'; }" +
+				"for (let i = 0; i < options.length; i++) {" +
+				"const o = options[i];" +
+				"if (o.parentElement !== listbox) { return 'wrong-parent'; }" +
+				"const pos = parseInt(o.getAttribute('aria-posinset'));" +
+				"if (isNaN(pos) || pos < 1) { return 'bad-posinset'; }" +
+				"if (o.getAttribute('aria-setsize') !== String(options.length)) { return 'bad-setsize'; }" +
+				"}" +
+				"return 'ok';" +
+				"})()";
+			return InvokeBrowserJs(js);
+		}
+
+		private static void EnableAccessibilityThroughDom()
+		{
+			InvokeBrowserJs("(function(){const button = document.getElementById('uno-enable-accessibility'); if (button) { button.click(); } return 'ok';})()");
+		}
+
+		private static string InvokeBrowserJs(string javascript)
+		{
+			var runtimeType = Type.GetType("Uno.Foundation.WebAssemblyRuntime, Uno.Foundation.Runtime.WebAssembly", throwOnError: false);
+			Assert.IsNotNull(runtimeType, "Unable to locate Uno.Foundation.WebAssemblyRuntime at runtime.");
+
+			var invokeJs = runtimeType.GetMethod("InvokeJS", new[] { typeof(string) });
+			Assert.IsNotNull(invokeJs, "Unable to locate Uno.Foundation.WebAssemblyRuntime.InvokeJS(string).");
+
+			return invokeJs.Invoke(obj: null, parameters: new object[] { javascript }) as string ?? string.Empty;
+		}
+#endif
+
 #if HAS_UNO
 		/// <summary>
 		/// Verifies that AriaMapper correctly identifies ComboBox semantic element type.
