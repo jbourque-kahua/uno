@@ -412,6 +412,37 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Automation
 				"A decorative AccessibilityView=Raw ItemsRepeater must not be emitted as a virtualized listbox (FR-031).");
 		}
 
+		/// <summary>
+		/// FR-014: main/navigation/search are top-level landmarks identified by role alone — an unnamed
+		/// Main must keep role=main. Only region/form (incl. Custom→region) require a name; an unnamed
+		/// region must NOT emit a role. Guards against over-gating every landmark on a name.
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		[PlatformCondition(ConditionMode.Include, RuntimeTestPlatforms.SkiaWasm)]
+		public async Task When_Unnamed_Main_Landmark_Then_Role_Kept_But_Unnamed_Region_Dropped()
+		{
+			var main = new Border();
+			AutomationProperties.SetLandmarkType(main, AutomationLandmarkType.Main);
+			var unnamedRegion = new Border();
+			AutomationProperties.SetLandmarkType(unnamedRegion, AutomationLandmarkType.Custom);
+			var panel = new StackPanel();
+			panel.Children.Add(main);
+			panel.Children.Add(unnamedRegion);
+
+			await UITestHelper.Load(panel);
+			await UITestHelper.WaitForIdle();
+			EnableAccessibilityThroughDom();
+			await UITestHelper.WaitFor(() => SemanticElementExists(main), timeoutMS: 5000,
+				message: "Timed out waiting for the Main landmark semantic node.");
+			await UITestHelper.WaitForIdle();
+
+			Assert.AreEqual("main", GetSemanticAttribute(main, "role"),
+				"An unnamed Main landmark must keep role=main (top-level landmark, no name required).");
+			Assert.AreEqual(string.Empty, GetSemanticAttribute(unnamedRegion, "role"),
+				"An unnamed Custom (region) landmark must NOT emit a role (region requires a name).");
+		}
+
 		private static void EnableAccessibilityThroughDom()
 		{
 			InvokeBrowserJs("(function(){const button = document.getElementById('uno-enable-accessibility'); if (button) { button.click(); } return 'ok';})()");

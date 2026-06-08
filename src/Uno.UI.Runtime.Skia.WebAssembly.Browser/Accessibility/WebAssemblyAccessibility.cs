@@ -1472,15 +1472,16 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 
 		// Elements with a LandmarkType get the corresponding ARIA landmark role.
 		// This overrides any other role since landmarks are a higher-level semantic.
-		// FR-014: a landmark/region MUST NOT be emitted unlabeled — drop the landmark role when the
-		// element has no accessible name so we never produce an unnamed landmark (axe "region must
-		// have a name"). A named container can still fall back to the role="group" path above.
+		// FR-014: region/form landmarks are only exposed when named (an unnamed region/form is not a
+		// landmark; axe "region must have a name"). main/navigation/search are top-level landmarks
+		// identified by role alone and keep their role even when unnamed.
 		var landmarkType = AutomationProperties.GetLandmarkType(child);
 		var hasLandmark = false;
-		if (landmarkType != AutomationLandmarkType.None && hasAccessibleName)
+		if (landmarkType != AutomationLandmarkType.None)
 		{
 			var landmarkRole = AriaMapper.GetLandmarkRole(landmarkType);
-			if (!string.IsNullOrEmpty(landmarkRole))
+			if (!string.IsNullOrEmpty(landmarkRole)
+				&& (landmarkRole is not ("region" or "form") || hasAccessibleName))
 			{
 				role = landmarkRole;
 				hasLandmark = true;
