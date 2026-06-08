@@ -1521,7 +1521,7 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 			this.Log().Trace($"[A11y] AddSemanticElement: generic path — control={child.GetType().Name} handle={child.Visual.Handle} role='{role}' name='{name}' automationId='{xamlAutomationId}'");
 		}
 
-		var result = NativeMethods.AddSemanticElement(parentHandle, child.Visual.Handle, index, width, height, x, y, role, name, IsAccessibilityFocusable(child, child.IsFocusable), ariaChecked, child.Visual.IsVisible, horizontallyScrollable, verticallyScrollable, child.GetType().Name, xamlAutomationId);
+		var result = NativeMethods.AddSemanticElement(parentHandle, child.Visual.Handle, index, width, height, x, y, role ?? string.Empty, name ?? string.Empty, IsAccessibilityFocusable(child, child.IsFocusable), ariaChecked, child.Visual.IsVisible, horizontallyScrollable, verticallyScrollable, child.GetType().Name, xamlAutomationId);
 
 		if (!result && this.Log().IsEnabled(LogLevel.Error))
 		{
