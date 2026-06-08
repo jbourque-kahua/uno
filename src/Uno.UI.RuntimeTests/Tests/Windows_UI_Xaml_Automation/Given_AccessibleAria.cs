@@ -234,6 +234,42 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Automation
 		}
 
 		/// <summary>
+		/// FR-030 hygiene (WASM DOM seam): a control with NO accessible name (no Name, no Content,
+		/// no LabeledBy) must have NO aria-label attribute at all — not an empty aria-label="".
+		/// Emitting an empty value is worse than omitting it: some screen readers announce "blank",
+		/// and an empty value explicitly clears the name rather than letting other name sources apply.
+		/// The create-path factory functions must mirror the generic setters' omit-when-empty guard.
+		/// Asserts both that the attribute reads as empty AND that it is genuinely absent.
+		/// </summary>
+		[TestMethod]
+		[RunsOnUIThread]
+		[PlatformCondition(ConditionMode.Include, RuntimeTestPlatforms.SkiaWasm)]
+		public async Task When_Nameless_Control_On_Wasm_Then_No_AriaLabel_Attribute()
+		{
+			// A CheckBox with no Name and no Content — the only nameless case the factory checkbox
+			// path can hit. An AutomationId is set so the semantic node carries SOME attribute and is
+			// addressable, but the AutomationId must NOT leak into (an empty) aria-label.
+			const string automationId = "NamelessCheck";
+
+			var checkBox = new CheckBox();
+			AutomationProperties.SetAutomationId(checkBox, automationId);
+
+			await UITestHelper.Load(checkBox);
+			await UITestHelper.WaitForIdle();
+			checkBox.GetOrCreateAutomationPeer();
+
+			EnableAccessibilityThroughDom();
+			await UITestHelper.WaitFor(() => SemanticElementExists(checkBox), timeoutMS: 5000,
+				message: "Timed out waiting for the CheckBox semantic node.");
+			await UITestHelper.WaitForIdle();
+
+			Assert.AreEqual(string.Empty, GetSemanticAttribute(checkBox, "aria-label"),
+				"A nameless control must have no accessible name in aria-label.");
+			Assert.IsFalse(SemanticElementHasAttribute(checkBox, "aria-label"),
+				"A nameless control must have NO aria-label attribute at all (not an empty aria-label=\"\").");
+		}
+
+		/// <summary>
 		/// Regression (FR-015, WASM DOM seam): a TextBlock kept for an explicit LiveSetting + AutomationId must
 		/// emit BOTH aria-live and xamlautomationid on its semantic element. FR-015 initially routed every
 		/// TextBlock through the bare Text element (textContent only), dropping these; the fix routes
@@ -936,6 +972,11 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Automation
 
 		private static string GetSemanticAttribute(UIElement element, string attribute)
 			=> InvokeBrowserJs($"(function(){{const e = document.getElementById('{GetSemanticElementId(element)}'); return e ? (e.getAttribute('{attribute}') ?? '') : '';}})()");
+
+		// Distinguishes a present-but-empty attribute (attr="") from an absent one — getAttribute
+		// returns '' in both cases, so absence must be asserted via hasAttribute.
+		private static bool SemanticElementHasAttribute(UIElement element, string attribute)
+			=> InvokeBrowserJs($"(function(){{const e = document.getElementById('{GetSemanticElementId(element)}'); return e && e.hasAttribute('{attribute}') ? '1' : '0';}})()") == "1";
 
 		private static string InvokeBrowserJs(string javascript)
 		{

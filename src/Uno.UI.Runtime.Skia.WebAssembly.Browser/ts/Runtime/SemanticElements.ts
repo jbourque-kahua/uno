@@ -52,6 +52,28 @@ namespace Uno.UI.Runtime.Skia {
 		}
 
 		/**
+		 * Sets an ARIA string attribute only when the value has meaningful (non-whitespace)
+		 * content; otherwise the attribute is removed/omitted entirely.
+		 *
+		 * Emitting an empty (or whitespace-only) value such as `aria-label=""` is worse than
+		 * omitting it: some screen readers announce "blank", and an empty value explicitly
+		 * clears the accessible name rather than letting other name sources apply. A control
+		 * with no accessible name must therefore have NO such attribute at all. This mirrors
+		 * the omit-when-empty guard used by the generic Accessibility.ts setters.
+		 */
+		private static setAriaStringAttribute(
+			element: HTMLElement,
+			name: string,
+			value: string | null | undefined
+		): void {
+			if (value && value.trim().length > 0) {
+				element.setAttribute(name, value);
+			} else {
+				element.removeAttribute(name);
+			}
+		}
+
+		/**
 		 * Removes any existing DOM element with the given id to prevent duplicates.
 		 * Returns the removed element (for potential reuse) or null.
 		 */
@@ -155,9 +177,7 @@ namespace Uno.UI.Runtime.Skia {
 			// A disabled control must not be a tab stop (T017), regardless of the peer focusability.
 			Accessibility.updateElementFocusability(element, isFocusable && !disabled);
 
-			if (label) {
-				element.setAttribute('aria-label', label);
-			}
+			this.setAriaStringAttribute(element, 'aria-label', label);
 
 			if (disabled) {
 				element.disabled = true;
@@ -206,9 +226,7 @@ namespace Uno.UI.Runtime.Skia {
 			// aria-pressed for toggle button pattern (distinct from aria-checked for checkboxes)
 			element.setAttribute('aria-pressed', pressed);
 
-			if (label) {
-				element.setAttribute('aria-label', label);
-			}
+			this.setAriaStringAttribute(element, 'aria-label', label);
 
 			if (disabled) {
 				element.disabled = true;
@@ -257,9 +275,7 @@ namespace Uno.UI.Runtime.Skia {
 			element.setAttribute('role', 'switch');
 			element.setAttribute('aria-checked', isOn);
 
-			if (label) {
-				element.setAttribute('aria-label', label);
-			}
+			this.setAriaStringAttribute(element, 'aria-label', label);
 
 			if (disabled) {
 				element.disabled = true;
@@ -319,9 +335,7 @@ namespace Uno.UI.Runtime.Skia {
 
 			// aria-valuetext: VoiceOver reads this instead of the raw number
 			// when a human-readable value description is available
-			if (valueText) {
-				element.setAttribute('aria-valuetext', valueText);
-			}
+			this.setAriaStringAttribute(element, 'aria-valuetext', valueText);
 
 			// aria-orientation reflects the XAML Slider.Orientation so screen readers
 			// announce the axis. Emitted for both axes (the implicit default is
@@ -369,9 +383,7 @@ namespace Uno.UI.Runtime.Skia {
 
 			Accessibility.updateElementFocusability(element, isFocusable);
 
-			if (label) {
-				element.setAttribute('aria-label', label);
-			}
+			this.setAriaStringAttribute(element, 'aria-label', label);
 
 			// Set checked state (WCAG 4.1.2: aria-checked must match visual state)
 			if (checkedState === 'true') {
@@ -423,9 +435,7 @@ namespace Uno.UI.Runtime.Skia {
 			element.tabIndex = (isFocusable && checked) ? 0 : -1;
 			element.style.pointerEvents = 'none';
 
-			if (label) {
-				element.setAttribute('aria-label', label);
-			}
+			this.setAriaStringAttribute(element, 'aria-label', label);
 
 			if (groupName) {
 				element.name = groupName;
@@ -480,8 +490,8 @@ namespace Uno.UI.Runtime.Skia {
 			element.style.fontSize = 'inherit';
 			element.style.fontWeight = 'inherit';
 
-			if (label) {
-				element.setAttribute('aria-label', label);
+			this.setAriaStringAttribute(element, 'aria-label', label);
+			if (label && label.trim().length > 0) {
 				element.textContent = label;
 			}
 
@@ -625,9 +635,7 @@ namespace Uno.UI.Runtime.Skia {
 			// not hardcoded here (FR-028).
 			Accessibility.updateElementFocusability(element, isFocusable);
 
-			if (selectedValue) {
-				element.setAttribute('aria-label', selectedValue);
-			}
+			this.setAriaStringAttribute(element, 'aria-label', selectedValue);
 
 			const callbacks = this.getCallbacks();
 
@@ -893,9 +901,7 @@ namespace Uno.UI.Runtime.Skia {
 			Accessibility.updateElementFocusability(element, isFocusable);
 			// Native <a> has implicit role="link" — no need to set explicitly
 
-			if (label) {
-				element.setAttribute('aria-label', label);
-			}
+			this.setAriaStringAttribute(element, 'aria-label', label);
 
 			const callbacks = this.getCallbacks();
 
@@ -941,9 +947,7 @@ namespace Uno.UI.Runtime.Skia {
 			// isFocusable is accepted for signature uniformity.
 			element.tabIndex = -1;
 			element.style.pointerEvents = 'none';
-			if (label) {
-				element.setAttribute('aria-label', label);
-			}
+			this.setAriaStringAttribute(element, 'aria-label', label);
 			this.appendToParent(element, parentHandle, index);
 		}
 
@@ -971,9 +975,7 @@ namespace Uno.UI.Runtime.Skia {
 			// Roving tabindex: only the selected tab is a tab stop; a non-focusable tab is never one.
 			element.tabIndex = (isFocusable && selected) ? 0 : -1;
 			element.style.pointerEvents = 'none';
-			if (label) {
-				element.setAttribute('aria-label', label);
-			}
+			this.setAriaStringAttribute(element, 'aria-label', label);
 			if (positionInSet > 0 && sizeOfSet > 0) {
 				element.setAttribute('aria-posinset', String(positionInSet));
 				element.setAttribute('aria-setsize', String(sizeOfSet));
@@ -1019,9 +1021,7 @@ namespace Uno.UI.Runtime.Skia {
 			// isFocusable is accepted for signature uniformity.
 			element.tabIndex = -1;
 			element.style.pointerEvents = 'none';
-			if (label) {
-				element.setAttribute('aria-label', label);
-			}
+			this.setAriaStringAttribute(element, 'aria-label', label);
 			if (multiselectable) {
 				element.setAttribute('aria-multiselectable', 'true');
 			}
@@ -1054,9 +1054,7 @@ namespace Uno.UI.Runtime.Skia {
 			// isFocusable is accepted for signature uniformity.
 			element.tabIndex = -1;
 			element.style.pointerEvents = 'none';
-			if (label) {
-				element.setAttribute('aria-label', label);
-			}
+			this.setAriaStringAttribute(element, 'aria-label', label);
 			if (level > 0) {
 				element.setAttribute('aria-level', String(level));
 			}
@@ -1173,9 +1171,7 @@ namespace Uno.UI.Runtime.Skia {
 			// isFocusable is accepted for signature uniformity.
 			element.tabIndex = -1;
 			element.style.pointerEvents = 'none';
-			if (label) {
-				element.setAttribute('aria-label', label);
-			}
+			this.setAriaStringAttribute(element, 'aria-label', label);
 			if (rowCount > 0) {
 				element.setAttribute('aria-rowcount', String(rowCount));
 			}
@@ -1234,9 +1230,7 @@ namespace Uno.UI.Runtime.Skia {
 			// isFocusable is accepted for signature uniformity.
 			element.tabIndex = -1;
 			element.style.pointerEvents = 'none';
-			if (label) {
-				element.setAttribute('aria-label', label);
-			}
+			this.setAriaStringAttribute(element, 'aria-label', label);
 			if (rowIndex > 0) {
 				element.setAttribute('aria-rowindex', String(rowIndex));
 			}
@@ -1268,9 +1262,7 @@ namespace Uno.UI.Runtime.Skia {
 			// isFocusable is accepted for signature uniformity.
 			element.tabIndex = -1;
 			element.style.pointerEvents = 'none';
-			if (label) {
-				element.setAttribute('aria-label', label);
-			}
+			this.setAriaStringAttribute(element, 'aria-label', label);
 			if (colIndex > 0) {
 				element.setAttribute('aria-colindex', String(colIndex));
 			}
@@ -1298,9 +1290,7 @@ namespace Uno.UI.Runtime.Skia {
 			// isFocusable is accepted for signature uniformity.
 			element.tabIndex = -1;
 			element.style.pointerEvents = 'none';
-			if (label) {
-				element.setAttribute('aria-label', label);
-			}
+			this.setAriaStringAttribute(element, 'aria-label', label);
 			this.appendToParent(element, parentHandle, index);
 		}
 
@@ -1327,9 +1317,7 @@ namespace Uno.UI.Runtime.Skia {
 			// is likewise not a tab stop (T017). isFocusable is accepted for signature uniformity.
 			element.tabIndex = -1;
 			element.style.pointerEvents = 'none';
-			if (label) {
-				element.setAttribute('aria-label', label);
-			}
+			this.setAriaStringAttribute(element, 'aria-label', label);
 			if (disabled) {
 				element.setAttribute('aria-disabled', 'true');
 			}
