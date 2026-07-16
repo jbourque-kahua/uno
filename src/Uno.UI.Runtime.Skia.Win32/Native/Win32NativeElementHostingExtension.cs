@@ -40,6 +40,12 @@ internal class Win32NativeElementHostingExtension : ContentPresenter.INativeElem
 	private bool _showWindowOnNextRender;
 	private int _zIndex;
 
+	// WS_EX_LAYERED excludes the hosted native child from normal OS hit-testing/input/cursor
+	// routing (WindowFromPoint, mouse/keyboard messages, WM_SETCURSOR, etc. all resolve to the
+	// parent instead), so it must only be applied while the element is actually faded (opacity < 1),
+	// not unconditionally for the lifetime of the hosted window. See #123756.
+	private bool _isLayeredForOpacity;
+
 	public Win32NativeElementHostingExtension(ContentPresenter presenter)
 	{
 		_presenter = presenter;
@@ -88,9 +94,8 @@ internal class Win32NativeElementHostingExtension : ContentPresenter.INativeElem
 			throw new ArgumentException($"content is not a {nameof(Win32NativeWindow)} instance.", nameof(content));
 		}
 
-		var oldExStyleVal = PInvoke.GetWindowLong((HWND)window.Hwnd, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE);
+		// WS_EX_LAYERED is intentionally NOT set here (unlike a prior version of this method); ChangeNativeElementOpacity applies it lazily, only while opacity < 1.
 		var oldStyleVal = PInvoke.GetWindowLong((HWND)window.Hwnd, WINDOW_LONG_PTR_INDEX.GWL_STYLE);
-		PInvoke.SetWindowLong((HWND)window.Hwnd, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE, oldExStyleVal | (int)WINDOW_EX_STYLE.WS_EX_LAYERED);
 		PInvoke.SetWindowLong((HWND)window.Hwnd, WINDOW_LONG_PTR_INDEX.GWL_STYLE, (oldStyleVal | (int)WINDOW_STYLE.WS_CLIPSIBLINGS) & ~(int)WINDOW_STYLE.WS_CAPTION); // removes the title bar and borders
 
 		_ = PInvoke.ShowWindow((HWND)window.Hwnd, SHOW_WINDOW_CMD.SW_HIDE);
@@ -460,8 +465,36 @@ internal class Win32NativeElementHostingExtension : ContentPresenter.INativeElem
 			throw new ArgumentException($"content is not a {nameof(Win32NativeWindow)} instance.", nameof(content));
 		}
 
-		var success = PInvoke.SetLayeredWindowAttributes((HWND)window.Hwnd, new COLORREF(0), (byte)Math.Round(opacity * 255), LAYERED_WINDOW_ATTRIBUTES_FLAGS.LWA_ALPHA);
-		if (!success) { this.LogError()?.Error($"{nameof(PInvoke.SetLayeredWindowAttributes)} failed: {Win32Helper.GetErrorMessage()}"); }
+		var hwnd = (HWND)window.Hwnd;
+		var shouldBeLayered = opacity < 1.0;
+		if (shouldBeLayered != _isLayeredForOpacity)
+		{
+			var exStyle = PInvoke.GetWindowLong(hwnd, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE);
+			exStyle = shouldBeLayered
+				? exStyle | (int)WINDOW_EX_STYLE.WS_EX_LAYERED
+				: exStyle & ~(int)WINDOW_EX_STYLE.WS_EX_LAYERED;
+			PInvoke.SetWindowLong(hwnd, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE, exStyle);
+
+			// Force the window manager to immediately pick up the extended-style change; without
+			// this, hit-testing/input routing may not reflect the new style until some other
+			// window event occurs.
+			if (!PInvoke.SetWindowPos(
+				hwnd,
+				HWND.Null,
+				0, 0, 0, 0,
+				SET_WINDOW_POS_FLAGS.SWP_NOMOVE | SET_WINDOW_POS_FLAGS.SWP_NOSIZE | SET_WINDOW_POS_FLAGS.SWP_NOZORDER | SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE | SET_WINDOW_POS_FLAGS.SWP_FRAMECHANGED))
+			{
+				this.LogError()?.Error($"{nameof(PInvoke.SetWindowPos)} failed: {Win32Helper.GetErrorMessage()}");
+			}
+
+			_isLayeredForOpacity = shouldBeLayered;
+		}
+
+		if (_isLayeredForOpacity)
+		{
+			var success = PInvoke.SetLayeredWindowAttributes(hwnd, new COLORREF(0), (byte)Math.Round(opacity * 255), LAYERED_WINDOW_ATTRIBUTES_FLAGS.LWA_ALPHA);
+			if (!success) { this.LogError()?.Error($"{nameof(PInvoke.SetLayeredWindowAttributes)} failed: {Win32Helper.GetErrorMessage()}"); }
+		}
 	}
 
 	public bool SupportsZIndex() => true;
