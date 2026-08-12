@@ -25,8 +25,20 @@ using SplitButtonAutomationPeer = Microsoft.UI.Xaml.Automation.Peers.SplitButton
 
 namespace Microsoft.UI.Xaml.Controls
 {
+	[TemplatePart(Name = PrimaryButtonPartName, Type = typeof(Button))]
+	[TemplatePart(Name = SecondaryButtonPartName, Type = typeof(Button))]
 	public partial class SplitButton : ContentControl
 	{
+		/// <summary>
+		/// Identifies the button template part that invokes the primary action.
+		/// </summary>
+		public const string PrimaryButtonPartName = "PrimaryButton";
+
+		/// <summary>
+		/// Identifies the button template part that opens the flyout menu.
+		/// </summary>
+		public const string SecondaryButtonPartName = "SecondaryButton";
+
 		private Button m_primaryButton = null;
 		private Button m_secondaryButton = null;
 
@@ -88,8 +100,8 @@ namespace Microsoft.UI.Xaml.Controls
 		{
 			UnregisterEvents();
 
-			m_primaryButton = GetTemplateChild("PrimaryButton") as Button;
-			m_secondaryButton = GetTemplateChild("SecondaryButton") as Button;
+			m_primaryButton = GetTemplateChild(PrimaryButtonPartName) as Button;
+			m_secondaryButton = GetTemplateChild(SecondaryButtonPartName) as Button;
 
 			if (m_primaryButton is { } primaryButton)
 			{
@@ -118,9 +130,11 @@ namespace Microsoft.UI.Xaml.Controls
 
 			if (m_secondaryButton is { } secondaryButton)
 			{
-				// Do localization for the secondary button
-				var secondaryName = ResourceAccessor.GetLocalizedStringResource(ResourceAccessor.SR_SplitButtonSecondaryButtonName);
-				AutomationProperties.SetName(secondaryButton, secondaryName);
+				if (string.IsNullOrEmpty(AutomationProperties.GetName(secondaryButton)))
+				{
+					var secondaryName = ResourceAccessor.GetLocalizedStringResource(ResourceAccessor.SR_SplitButtonSecondaryButtonName);
+					AutomationProperties.SetName(secondaryButton, secondaryName);
+				}
 
 				m_clickSecondaryRevoker.Disposable = new DisposableAction(() => secondaryButton.Click -= OnClickSecondary);
 				secondaryButton.Click += OnClickSecondary;
@@ -341,6 +355,10 @@ namespace Microsoft.UI.Xaml.Controls
 			m_isFlyoutOpen = true;
 			UpdateVisualStates();
 			SharedHelpers.RaiseAutomationPropertyChangedEvent(this, ExpandCollapseState.Collapsed, ExpandCollapseState.Expanded);
+			if (m_secondaryButton is { } secondaryButton)
+			{
+				SharedHelpers.RaiseAutomationPropertyChangedEvent(secondaryButton, ExpandCollapseState.Collapsed, ExpandCollapseState.Expanded);
+			}
 		}
 
 		private void OnFlyoutClosed(object sender, object args)
@@ -348,6 +366,10 @@ namespace Microsoft.UI.Xaml.Controls
 			m_isFlyoutOpen = false;
 			UpdateVisualStates();
 			SharedHelpers.RaiseAutomationPropertyChangedEvent(this, ExpandCollapseState.Expanded, ExpandCollapseState.Collapsed);
+			if (m_secondaryButton is { } secondaryButton)
+			{
+				SharedHelpers.RaiseAutomationPropertyChangedEvent(secondaryButton, ExpandCollapseState.Expanded, ExpandCollapseState.Collapsed);
+			}
 		}
 
 		private void OnFlyoutPlacementChanged(DependencyObject sender, DependencyProperty dp)

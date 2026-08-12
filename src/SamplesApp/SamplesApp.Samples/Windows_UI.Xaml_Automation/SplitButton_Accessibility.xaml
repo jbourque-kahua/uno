@@ -1,0 +1,29 @@
+﻿<Page
+    x:Class="UITests.Shared.Windows_UI_Xaml_Automation.SplitButton_Accessibility"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Microsoft.UI.Xaml.Controls"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <StackPanel Margin="16" Spacing="12">
+        <TextBlock
+            FontSize="20"
+            FontWeight="SemiBold"
+            Text="SplitButton accessibility" />
+
+        <TextBlock Text="The native SplitButton should expose a labelled group containing a primary Export button and a separate Export options menu button." TextWrapping="Wrap" />
+
+        <controls:SplitButton
+            x:Name="ExportSplitButton"
+            AutomationProperties.Name="Export actions"
+            Content="Export">
+            <controls:SplitButton.Flyout>
+                <MenuFlyout>
+                    <MenuFlyoutItem Text="Export as PDF" />
+                    <MenuFlyoutItem Text="Export as Excel" />
+                    <MenuFlyoutItem Text="Export as JSON" />
+                </MenuFlyout>
+            </controls:SplitButton.Flyout>
+        </controls:SplitButton>
+    </StackPanel>
+</Page>

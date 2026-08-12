@@ -43,6 +43,7 @@ public static class AriaMapper
 		{ AutomationControlType.Hyperlink, "link" },
 		{ AutomationControlType.Image, "img" },
 		{ AutomationControlType.Group, "group" },
+		{ AutomationControlType.SplitButton, "group" },
 		{ AutomationControlType.Header, "heading" },
 		{ AutomationControlType.ToolTip, "tooltip" },
 		{ AutomationControlType.DataGrid, "grid" },

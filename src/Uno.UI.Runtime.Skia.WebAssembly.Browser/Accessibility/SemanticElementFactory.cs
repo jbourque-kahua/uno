@@ -199,6 +199,12 @@ internal static partial class SemanticElementFactory
 			NativeMethods.UpdateAriaHasPopup(handle, attributes.HasPopup);
 		}
 
+		if (created && owner is not null && SplitButtonSemanticParts.IsSecondaryTemplatePart(owner))
+		{
+			NativeMethods.UpdateAriaHasPopup(handle, "menu");
+			NativeMethods.UpdateExpandCollapseState(handle, false);
+		}
+
 		// Apply the HTML accesskey attribute from AccessKey (mnemonic), kept separate from
 		// aria-keyshortcuts (FR-028).
 		if (created && !string.IsNullOrEmpty(attributes.AccessKey))

@@ -1357,7 +1357,7 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 		// Elements with AccessibilityView="Raw" are excluded from the accessibility tree entirely.
 		// This matches WinUI3 behavior where Raw elements are not exposed to UIA.
 		var accessibilityView = AutomationProperties.GetAccessibilityView(element);
-		if (accessibilityView == AccessibilityView.Raw)
+		if (accessibilityView == AccessibilityView.Raw && !SplitButtonSemanticParts.IsTemplatePart(element, out _))
 		{
 			return false;
 		}
@@ -1717,6 +1717,7 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 		}
 
 		var automationPeer = child.GetOrCreateAutomationPeer();
+		var isSplitButtonTemplatePart = SplitButtonSemanticParts.IsTemplatePart(child, out _);
 
 		// Try to create type-specific semantic elements (button, slider, checkbox, etc.)
 		// This provides better keyboard support and screen reader compatibility
@@ -1738,7 +1739,7 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 				width,
 				height,
 				child,
-				IsAccessibilityFocusable(child, child.IsFocusable));
+				isSplitButtonTemplatePart || IsAccessibilityFocusable(child, child.IsFocusable));
 
 			if (created)
 			{
@@ -1836,7 +1837,7 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 			this.Log().Trace($"[A11y] AddSemanticElement: generic path — control={child.GetType().Name} handle={child.Visual.Handle} role='{role}' name='{name}' automationId='{xamlAutomationId}'");
 		}
 
-		var result = NativeMethods.AddSemanticElement(parentHandle, child.Visual.Handle, index, width, height, x, y, role ?? string.Empty, name ?? string.Empty, IsAccessibilityFocusable(child, child.IsFocusable), ariaChecked, child.Visual.IsVisible, horizontallyScrollable, verticallyScrollable, child.GetType().Name, xamlAutomationId);
+		var result = NativeMethods.AddSemanticElement(parentHandle, child.Visual.Handle, index, width, height, x, y, role ?? string.Empty, name ?? string.Empty, isSplitButtonTemplatePart || IsAccessibilityFocusable(child, child.IsFocusable), ariaChecked, child.Visual.IsVisible, horizontallyScrollable, verticallyScrollable, child.GetType().Name, xamlAutomationId);
 
 		if (!result && this.Log().IsEnabled(LogLevel.Error))
 		{
@@ -1885,7 +1886,8 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 			{
 				try
 				{
-					if (automationPeer.GetPattern(PatternInterface.ExpandCollapse) is IExpandCollapseProvider expandCollapseProvider)
+					if (automationPeer.GetAutomationControlType() != AutomationControlType.SplitButton &&
+						automationPeer.GetPattern(PatternInterface.ExpandCollapse) is IExpandCollapseProvider expandCollapseProvider)
 					{
 						var expanded = expandCollapseProvider.ExpandCollapseState == ExpandCollapseState.Expanded ||
 									   expandCollapseProvider.ExpandCollapseState == ExpandCollapseState.PartiallyExpanded;
@@ -2103,7 +2105,18 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 			{
 				this.Log().Trace($"[A11y] PROP CHANGE: ExpandCollapse handle={element.Visual.Handle} element={element.GetType().Name} expanded={expanded}");
 			}
-			NativeMethods.UpdateExpandCollapseState(element.Visual.Handle, expanded);
+			if (peer.GetAutomationControlType() != AutomationControlType.SplitButton)
+			{
+				NativeMethods.UpdateExpandCollapseState(element.Visual.Handle, expanded);
+
+				if (SplitButtonSemanticParts.TryGetOwner(element, out var splitButton, out var isSecondary) && isSecondary)
+				{
+					var controlledMenuId = expanded && splitButton?.Flyout?.GetPresenter() is UIElement presenter
+						? $"uno-semantics-{presenter.Visual.Handle}"
+						: string.Empty;
+					NativeMethods.UpdateAriaControls(element.Visual.Handle, controlledMenuId);
+				}
+			}
 		}
 		else if (automationProperty == SelectionItemPatternIdentifiers.IsSelectedProperty &&
 			TryGetPeerOwner(peer, out element))
