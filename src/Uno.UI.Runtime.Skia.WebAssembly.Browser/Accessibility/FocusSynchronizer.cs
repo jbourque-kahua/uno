@@ -136,6 +136,14 @@ internal sealed partial class FocusSynchronizer
 			// Many UIElements (Grid, Border, SplitView, etc.) are pruned from the
 			// semantic tree and don't have corresponding DOM nodes.
 			var semanticHandle = _accessibility.ResolveToSemanticHandle(element);
+			if (_accessibility.TryGetOpenComboBoxForItem(element, out var comboBox) && comboBox is not null)
+			{
+				// The popup owns XAML focus for keyboard navigation, but the ARIA combobox
+				// pattern keeps browser focus on its head and exposes the active option via
+				// aria-activedescendant. This method's syncing guard suppresses the matching
+				// browser-to-XAML focus callback, so it cannot pull focus out of the popup.
+				semanticHandle = _accessibility.ResolveToSemanticHandle(comboBox);
+			}
 			if (semanticHandle == IntPtr.Zero)
 			{
 				// No semantic element found — still track the focused element

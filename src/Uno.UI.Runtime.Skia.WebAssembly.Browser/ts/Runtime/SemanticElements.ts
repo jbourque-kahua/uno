@@ -668,8 +668,24 @@ namespace Uno.UI.Runtime.Skia {
 
 			// Keyboard handlers for expand/collapse (WAI-ARIA combobox pattern)
 			element.addEventListener('keydown', (e) => {
+				const isOpen = element.getAttribute('aria-expanded') === 'true';
+				if ((e.key === 'Enter' || e.key === ' ') && isOpen) {
+					const activeDescendant = element.getAttribute('aria-activedescendant');
+					const activeHandle = activeDescendant?.replace('uno-semantics-', '');
+					const activeItemHandle = activeHandle ? Number(activeHandle) : Number.NaN;
+					if (Number.isFinite(activeItemHandle) && callbacks.onSelection) {
+						e.preventDefault();
+						e.stopPropagation();
+						callbacks.onSelection(activeItemHandle);
+
+						// Semantic DOM focus intentionally remains on this head, so the option
+						// receives the selection callback through its active descendant.
+						return;
+					}
+				}
 				if (e.key === 'Enter' || e.key === ' ' || (e.key === 'ArrowDown' && e.altKey)) {
 					e.preventDefault();
+					e.stopPropagation();
 					if (callbacks.onExpandCollapse) {
 						callbacks.onExpandCollapse(handle);
 					}
@@ -677,6 +693,7 @@ namespace Uno.UI.Runtime.Skia {
 					// Escape collapses an open popup (WAI-ARIA combobox pattern)
 					if (element.getAttribute('aria-expanded') === 'true') {
 						e.preventDefault();
+						e.stopPropagation();
 						if (callbacks.onExpandCollapse) {
 							callbacks.onExpandCollapse(handle);
 						}
@@ -888,9 +905,17 @@ namespace Uno.UI.Runtime.Skia {
 		 * Updates the selected state of a list item element.
 		 */
 		public static updateSelectionState(handle: number, selected: boolean): void {
-			const element = document.getElementById(`uno-semantics-${handle}`);
-			if (element) {
-				element.setAttribute('aria-selected', String(selected));
+			const update = () => {
+				const element = document.getElementById(`uno-semantics-${handle}`);
+				if (element) {
+					element.setAttribute('aria-selected', String(selected));
+				}
+			};
+
+			if (document.getElementById(`uno-semantics-${handle}`)) {
+				update();
+			} else {
+				SemanticElements.scheduleVirtualizedMutation(update);
 			}
 		}
 

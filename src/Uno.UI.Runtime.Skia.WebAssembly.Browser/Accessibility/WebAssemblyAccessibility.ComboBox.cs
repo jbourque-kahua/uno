@@ -119,6 +119,20 @@ internal partial class WebAssemblyAccessibility
 		}
 	}
 
+	internal bool TryGetOpenComboBoxForItem(UIElement element, out ComboBox? comboBox)
+	{
+		if (element is ComboBoxItem item &&
+			ItemsControl.ItemsControlFromItemContainer(item) is ComboBox ownerComboBox &&
+			ownerComboBox.IsDropDownOpen)
+		{
+			comboBox = ownerComboBox;
+			return true;
+		}
+
+		comboBox = null;
+		return false;
+	}
+
 	/// <summary>
 	/// Emits a realized dropdown item as a role="option" under the ComboBox's listbox region.
 	/// No-op for anything that isn't a ComboBoxItem of an open dropdown.
@@ -166,6 +180,7 @@ internal partial class WebAssemblyAccessibility
 			item.Visual.Size.X, item.Visual.Size.Y,
 			"option",
 			label);
+		NativeMethods.UpdateSelectionState(item.Visual.Handle, item.IsSelected);
 
 		// Point aria-activedescendant at the selected option so the combobox head
 		// announces the active item without moving DOM focus off the head.

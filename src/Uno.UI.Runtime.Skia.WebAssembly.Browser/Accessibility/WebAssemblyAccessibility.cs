@@ -1114,6 +1114,19 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 
 		if (GCHandle.FromIntPtr(handle).Target is ContainerVisual { Owner.Target: UIElement owner })
 		{
+			if (owner is ComboBoxItem comboBoxItem &&
+				ItemsControl.ItemsControlFromItemContainer(comboBoxItem) is ComboBox comboBox)
+			{
+				var selectedIndex = comboBox.IndexFromContainer(comboBoxItem);
+				if (selectedIndex >= 0)
+				{
+					comboBox.SelectedIndex = selectedIndex;
+					comboBox.IsDropDownOpen = false;
+				}
+
+				return;
+			}
+
 			var peer = owner.GetOrCreateAutomationPeer();
 			if (peer?.GetPattern(PatternInterface.SelectionItem) is ISelectionItemProvider selectionItemProvider)
 			{
@@ -2345,7 +2358,15 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 						this.Log().Trace($"[A11y] AUTOMATION EVENT: AutomationFocusChanged handle={focusElement.Visual.Handle} element={focusElement.GetType().Name}");
 					}
 
-					if (HasSemanticElement(focusElement.Visual.Handle))
+					if (focusElement is ComboBoxItem item &&
+						ItemsControl.ItemsControlFromItemContainer(item) is ComboBox comboBox &&
+						comboBox.IsDropDownOpen)
+					{
+						// FocusSynchronizer keeps DOM focus on the combobox head while the popup
+						// retains XAML focus. Point the head at the active option for announcement.
+						NativeMethods.UpdateActiveDescendant(comboBox.Visual.Handle, item.Visual.Handle);
+					}
+					else if (HasSemanticElement(focusElement.Visual.Handle))
 					{
 						NativeMethods.FocusSemanticElement(focusElement.Visual.Handle);
 					}

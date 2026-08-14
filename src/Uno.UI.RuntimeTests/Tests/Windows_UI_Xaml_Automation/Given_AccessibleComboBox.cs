@@ -218,6 +218,68 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Automation
 			}
 		}
 
+		[TestMethod]
+		[RunsOnUIThread]
+		[PlatformCondition(ConditionMode.Include, RuntimeTestPlatforms.SkiaWasm)]
+		public async Task When_DropDown_Option_Focused_Then_Head_Tracks_ActiveDescendant()
+		{
+			var comboBox = new ComboBox();
+			comboBox.Items.Add("Option A");
+			comboBox.Items.Add("Option B");
+			comboBox.Items.Add("Option C");
+
+			try
+			{
+				await UITestHelper.Load(comboBox);
+				comboBox.GetOrCreateAutomationPeer();
+
+				EnableAccessibilityThroughDom();
+				await UITestHelper.WaitFor(
+					() => ComboBoxHeadExists(comboBox),
+					timeoutMS: 5000,
+					message: "Timed out waiting for the semantic combobox head element to be created.");
+
+				comboBox.IsDropDownOpen = true;
+				await UITestHelper.WaitFor(
+					() => GetListBoxOptionCount(comboBox) == 3,
+					timeoutMS: 5000,
+					message: "Timed out waiting for the dropdown options to be exposed.");
+
+				var option = comboBox.ContainerFromIndex(1) as ComboBoxItem;
+				Assert.IsNotNull(option, "The second ComboBox option should be realized.");
+				Assert.IsTrue(option.Focus(FocusState.Keyboard), "The dropdown option should receive XAML focus.");
+
+				await UITestHelper.WaitFor(
+					() => GetActiveDescendant(comboBox) == GetSemanticElementId(option),
+					timeoutMS: 5000,
+					message: "Timed out waiting for the combobox head to track the focused dropdown option with aria-activedescendant.");
+				Assert.AreEqual(
+					GetSemanticElementId(comboBox),
+					GetBrowserActiveElementId(),
+					"DOM focus must remain on the combobox head while an open dropdown item has XAML focus.");
+
+				DispatchSemanticKeyDown(comboBox, "Enter");
+				await UITestHelper.WaitFor(
+					() => comboBox.SelectedIndex == 1 && !comboBox.IsDropDownOpen,
+					timeoutMS: 5000,
+					message: "Timed out waiting for Enter on the combobox head to select its active option and close the popup.");
+
+				comboBox.IsDropDownOpen = true;
+				await UITestHelper.WaitFor(
+					() => GetListBoxOptionCount(comboBox) == 3,
+					timeoutMS: 5000,
+					message: "Timed out waiting for the selected dropdown option to be realized again.");
+				var selectedOption = comboBox.ContainerFromIndex(1) as ComboBoxItem;
+				Assert.IsNotNull(selectedOption, "The committed dropdown option should be realized after reopening.");
+				Assert.AreEqual("true", GetSemanticAttribute(selectedOption, "aria-selected"), "The committed option must report aria-selected=true when the dropdown is reopened.");
+			}
+			finally
+			{
+				comboBox.IsDropDownOpen = false;
+				TestServices.WindowHelper.WindowContent = null;
+			}
+		}
+
 		// Returns "dupP|dialogs": count of standalone <p> whose text matches an option label (duplicate
 		// emission), and count of role=dialog nodes containing any role=option (un-suppressed popup).
 		// "0|0" once both residuals are fixed.
@@ -233,8 +295,23 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Automation
 			return InvokeBrowserJs(js);
 		}
 
-		private static string GetSemanticElementId(ComboBox comboBox)
-			=> "uno-semantics-" + ((long)comboBox.Visual.Handle).ToString(System.Globalization.CultureInfo.InvariantCulture);
+		private static string GetSemanticElementId(UIElement element)
+			=> "uno-semantics-" + ((long)element.Visual.Handle).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+		private static string GetActiveDescendant(ComboBox comboBox)
+		{
+			var id = GetSemanticElementId(comboBox);
+			return InvokeBrowserJs("(function(){var head=document.getElementById('" + id + "');return head ? (head.getAttribute('aria-activedescendant') || '') : '';})()");
+		}
+
+		private static string GetBrowserActiveElementId()
+			=> InvokeBrowserJs("(function(){return document.activeElement ? document.activeElement.id : '';})()");
+
+		private static void DispatchSemanticKeyDown(UIElement element, string key)
+		{
+			var id = GetSemanticElementId(element);
+			InvokeBrowserJs("(function(){var target=document.getElementById('" + id + "');if(target){target.dispatchEvent(new KeyboardEvent('keydown',{key:'" + key + "',bubbles:true,cancelable:true}));}return 'ok';})()");
+		}
 
 		private static bool ComboBoxHeadExists(ComboBox comboBox)
 		{
