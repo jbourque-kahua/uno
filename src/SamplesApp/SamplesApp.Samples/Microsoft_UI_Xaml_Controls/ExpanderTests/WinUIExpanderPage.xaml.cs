@@ -1,4 +1,7 @@
 ﻿using Uno.UI.Samples.Controls;
+using System.Collections.Generic;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 
@@ -28,6 +31,9 @@ namespace UITests.Shared.Microsoft_UI_Xaml_Controls.ExpanderTests
 		public WinUIExpanderPage()
 		{
 			this.InitializeComponent();
+			ControlledContentExpander.SetValue(
+				AutomationProperties.ControlledPeersProperty,
+				new List<UIElement> { ControlledContentPanel });
 #if !WINAPPSDK
 			var customControlPeer = FrameworkElementAutomationPeer.FromElement(CustomControl);
 			var expanderPeer = FrameworkElementAutomationPeer.FromElement(ExpanderWithCustomEventsSource);

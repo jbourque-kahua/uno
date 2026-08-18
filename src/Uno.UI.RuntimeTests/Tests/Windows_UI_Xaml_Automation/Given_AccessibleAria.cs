@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Microsoft.UI.Xaml;
@@ -25,6 +26,35 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Automation
 	public class Given_AccessibleAria
 	{
 #if HAS_UNO
+		private sealed class DeferredRelationButton : Button
+		{
+			public UIElement ControlledElement { get; set; }
+
+			protected override AutomationPeer OnCreateAutomationPeer() => new DeferredRelationButtonAutomationPeer(this);
+		}
+
+		private sealed class DeferredRelationButtonAutomationPeer : ButtonAutomationPeer
+		{
+			public DeferredRelationButtonAutomationPeer(DeferredRelationButton owner)
+				: base(owner)
+			{
+			}
+
+			protected override IReadOnlyList<AutomationPeer> GetControlledPeersCore()
+			{
+				if (Owner is DeferredRelationButton { ControlledElement: { } controlledElement } &&
+					FrameworkElementAutomationPeer.CreatePeerForElement(controlledElement) is { } controlledPeer)
+				{
+					return new[] { controlledPeer };
+				}
+
+				return base.GetControlledPeersCore();
+			}
+
+			public void RaiseControlledPeersChanged() =>
+				RaisePropertyChangedEvent(AutomationElementIdentifiers.ControlledPeersProperty, null, null);
+		}
+
 		/// <summary>
 		/// T019/T020: A control with AutomationProperties.AutomationId set but no Name must NOT
 		/// expose the AutomationId as its accessible name. aria-label is sourced only from the
@@ -210,6 +240,51 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Automation
 #endif
 
 #if __SKIA__
+		[TestMethod]
+		[RunsOnUIThread]
+		[PlatformCondition(ConditionMode.Include, RuntimeTestPlatforms.SkiaWasm)]
+		public async Task When_Controlled_Target_Becomes_Visible_Then_AriaControls_Is_Refreshed()
+		{
+			var source = new DeferredRelationButton { Content = "Project contacts" };
+			var target = new StackPanel { Visibility = Visibility.Collapsed };
+			AutomationProperties.SetName(target, "Project contacts content");
+			target.Children.Add(new TextBox { Header = "Contact name" });
+			var panel = new StackPanel { Children = { source, target } };
+
+			try
+			{
+				await UITestHelper.Load(panel);
+				var sourcePeer = (DeferredRelationButtonAutomationPeer)source.GetOrCreateAutomationPeer();
+
+				EnableAccessibilityThroughDom();
+				await UITestHelper.WaitFor(() => SemanticElementExists(source), timeoutMS: 5000,
+					message: "Timed out waiting for the source semantic element.");
+
+				source.ControlledElement = target;
+				sourcePeer.RaiseControlledPeersChanged();
+				await UITestHelper.WaitForIdle();
+
+				Assert.IsFalse(SemanticElementHasAttribute(source, "aria-controls"),
+					"aria-controls must not contain a dangling reference while the target is collapsed.");
+
+				target.Visibility = Visibility.Visible;
+				await UITestHelper.WaitFor(() => SemanticElementExists(target), timeoutMS: 5000,
+					message: "Timed out waiting for the controlled target semantic element.");
+				await UITestHelper.WaitFor(
+					() => GetSemanticAttribute(source, "aria-controls") == GetSemanticElementId(target),
+					timeoutMS: 5000,
+					message: "aria-controls was not refreshed after the controlled target became visible.");
+
+				target.Visibility = Visibility.Collapsed;
+				await UITestHelper.WaitFor(() => !SemanticElementHasAttribute(source, "aria-controls"), timeoutMS: 5000,
+					message: "aria-controls was not cleared after the controlled target became collapsed.");
+			}
+			finally
+			{
+				TestServices.WindowHelper.WindowContent = null;
+			}
+		}
+
 		/// <summary>
 		/// T019/T020 (WASM seam, handed off): On the WASM DOM path, a control with an AutomationId
 		/// must surface it as the <c>xamlautomationid</c> attribute on its semantic element — NOT as

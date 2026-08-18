@@ -1134,25 +1134,16 @@ internal static partial class SemanticElementFactory
 	/// Applies ARIA relationship attributes (describedby, controls, flowto) to a semantic element.
 	/// Resolves AutomationPeer collections to space-separated DOM element IDs.
 	/// </summary>
-	private static void ApplyRelationshipAttributes(AutomationPeer peer, IntPtr handle)
+	internal static void ApplyRelationshipAttributes(AutomationPeer peer, IntPtr handle)
 	{
 		var describedByIds = ResolvePeerCollectionToIdList(peer.GetDescribedBy());
-		if (describedByIds is not null)
-		{
-			NativeMethods.UpdateAriaDescribedBy(handle, describedByIds);
-		}
+		NativeMethods.UpdateAriaDescribedBy(handle, describedByIds ?? string.Empty);
 
 		var controlledIds = ResolvePeerCollectionToIdList(peer.GetControlledPeers());
-		if (controlledIds is not null)
-		{
-			NativeMethods.UpdateAriaControls(handle, controlledIds);
-		}
+		NativeMethods.UpdateAriaControls(handle, controlledIds ?? string.Empty);
 
 		var flowsToIds = ResolvePeerCollectionToIdList(peer.GetFlowsTo());
-		if (flowsToIds is not null)
-		{
-			NativeMethods.UpdateAriaFlowTo(handle, flowsToIds);
-		}
+		NativeMethods.UpdateAriaFlowTo(handle, flowsToIds ?? string.Empty);
 	}
 
 	/// <summary>
@@ -1279,7 +1270,8 @@ internal static partial class SemanticElementFactory
 			if (relatedPeer is FrameworkElementAutomationPeer { Owner: { } relatedOwner })
 			{
 				var relatedHandle = relatedOwner.Visual.Handle;
-				if (relatedHandle != IntPtr.Zero)
+				if (relatedHandle != IntPtr.Zero &&
+					WebAssemblyAccessibility.Instance.HasSemanticElement(relatedHandle))
 				{
 					sb ??= new StringBuilder();
 					if (sb.Length > 0)
@@ -1292,7 +1284,7 @@ internal static partial class SemanticElementFactory
 			}
 		}
 
-		return sb?.ToString();
+		return sb?.ToString() ?? string.Empty;
 	}
 
 	private static partial class NativeMethods

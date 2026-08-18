@@ -57,6 +57,25 @@
             </controls:Expander>
 
             <controls:Expander
+                x:Name="ControlledContentExpander"
+                Width="{ThemeResource FlyoutThemeMaxWidth}"
+                Margin="12"
+                AutomationProperties.Name="Project contacts"
+                IsExpanded="False">
+                <controls:Expander.Header>
+                    <TextBlock Text="Project contacts" />
+                </controls:Expander.Header>
+                <StackPanel
+                    x:Name="ControlledContentPanel"
+                    AutomationProperties.AutomationId="ControlledContentPanel"
+                    Spacing="8">
+                    <TextBox Header="Contact name" />
+                    <TextBox Header="Email" PlaceholderText="name@example.com" />
+                    <CheckBox Content="Send project updates" IsChecked="True" />
+                </StackPanel>
+            </controls:Expander>
+
+            <controls:Expander
                 MaxWidth="{ThemeResource FlyoutThemeMaxWidth}"
                 Margin="12"
                 AutomationProperties.Name="ExpanderWithButtons"

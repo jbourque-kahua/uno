@@ -183,6 +183,12 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 	/// outermost OnChildAdded call for panels loaded after accessibility is already enabled.
 	/// </summary>
 	private readonly List<(IntPtr Handle, AutomationPeer Peer)> _pendingLabelledBy = new();
+	/// <summary>
+	/// Semantic sources that expose aria-describedby, aria-controls, or aria-flowto relationships.
+	/// A related target may be added to the semantic tree after its source (for example, Expander
+	/// content becoming visible), so these sources are retained weakly and refreshed as nodes appear.
+	/// </summary>
+	private readonly Dictionary<IntPtr, WeakReference<AutomationPeer>> _relationshipPeers = new();
 
 	/// <summary>
 	/// Reentrancy depth of <see cref="OnChildAdded"/>. OnChildAdded recurses through a whole subtree
@@ -396,6 +402,7 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 					if (AddSemanticElement(semanticParent, child, index))
 					{
 						_semanticParentMap[childHandle] = semanticParent;
+						TrackRelationshipPeer(childHandle, child.GetOrCreateAutomationPeer());
 
 						// FR-019/FR-022: defer aria-labelledby resolution on the dynamic path too. The
 						// inline resolution inside AddSemanticElement is order-dependent — a following-
@@ -452,6 +459,7 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 			if (--_onChildAddedDepth == 0)
 			{
 				DrainPendingLabelledBy();
+				RefreshRelationshipAttributes();
 			}
 		}
 	}
@@ -492,7 +500,10 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 				RemoveSemanticElement(semanticParent, childHandle);
 				_semanticParentMap.Remove(childHandle);
 				_prunedHandles.Remove(childHandle);
+				_relationshipPeers.Remove(childHandle);
 			}
+
+			RefreshRelationshipAttributes();
 		}
 		catch (Exception ex)
 		{
@@ -750,6 +761,7 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 					var shownParent = shownElement.GetParent() as UIElement;
 					var shownParentHandle = shownParent is not null ? FindSemanticParent(shownParent) : _rootElementHandle;
 					BuildSemanticsTreeRecursive(shownParentHandle, shownElement);
+					RefreshRelationshipAttributes();
 					return;
 				}
 
@@ -1300,6 +1312,7 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 		// registered. Re-resolve the deferred aria-labelledby IDREFs so emission is order-independent
 		// (covers labellers built after the labelled control). HasSemanticElement still gates each one.
 		DrainPendingLabelledBy();
+		RefreshRelationshipAttributes();
 
 		if (this.Log().IsEnabled(LogLevel.Debug))
 		{
@@ -1334,6 +1347,33 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 				NativeMethods.UpdateAriaLabelledBy(labelledHandle, labelledById);
 				_pendingLabelledBy.RemoveAt(i);
 			}
+		}
+	}
+
+	private void TrackRelationshipPeer(IntPtr handle, AutomationPeer? peer)
+	{
+		if (peer is not null &&
+			(peer.GetDescribedBy() is not null || peer.GetControlledPeers() is not null || peer.GetFlowsTo() is not null))
+		{
+			_relationshipPeers[handle] = new WeakReference<AutomationPeer>(peer);
+		}
+		else
+		{
+			_relationshipPeers.Remove(handle);
+		}
+	}
+
+	private void RefreshRelationshipAttributes()
+	{
+		foreach (var (handle, weakPeer) in _relationshipPeers.ToArray())
+		{
+			if (!HasSemanticElement(handle) || !weakPeer.TryGetTarget(out var peer))
+			{
+				_relationshipPeers.Remove(handle);
+				continue;
+			}
+
+			SemanticElementFactory.ApplyRelationshipAttributes(peer, handle);
 		}
 	}
 
@@ -1644,6 +1684,7 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 			{
 				_semanticParentMap[handle] = parentHandle;
 				effectiveParent = handle; // children go under this element
+				TrackRelationshipPeer(handle, child.GetOrCreateAutomationPeer());
 			}
 			else if (this.Log().IsEnabled(LogLevel.Warning))
 			{
@@ -2229,32 +2270,20 @@ internal partial class WebAssemblyAccessibility : SkiaAccessibilityBase
 		else if (automationProperty == AutomationElementIdentifiers.DescribedByProperty &&
 			TryGetPeerOwner(peer, out element))
 		{
-			// Dynamic aria-describedby: when DescribedBy collection changes
-			var describedByIds = SemanticElementFactory.ResolvePeerCollectionToIdList(peer.GetDescribedBy());
-			if (describedByIds is not null)
-			{
-				NativeMethods.UpdateAriaDescribedBy(element.Visual.Handle, describedByIds);
-			}
+			TrackRelationshipPeer(element.Visual.Handle, peer);
+			SemanticElementFactory.ApplyRelationshipAttributes(peer, element.Visual.Handle);
 		}
 		else if (automationProperty == AutomationElementIdentifiers.ControlledPeersProperty &&
 			TryGetPeerOwner(peer, out element))
 		{
-			// Dynamic aria-controls: when ControlledPeers collection changes
-			var controlledIds = SemanticElementFactory.ResolvePeerCollectionToIdList(peer.GetControlledPeers());
-			if (controlledIds is not null)
-			{
-				NativeMethods.UpdateAriaControls(element.Visual.Handle, controlledIds);
-			}
+			TrackRelationshipPeer(element.Visual.Handle, peer);
+			SemanticElementFactory.ApplyRelationshipAttributes(peer, element.Visual.Handle);
 		}
 		else if (automationProperty == AutomationElementIdentifiers.FlowsToProperty &&
 			TryGetPeerOwner(peer, out element))
 		{
-			// Dynamic aria-flowto: when FlowsTo collection changes
-			var flowsToIds = SemanticElementFactory.ResolvePeerCollectionToIdList(peer.GetFlowsTo());
-			if (flowsToIds is not null)
-			{
-				NativeMethods.UpdateAriaFlowTo(element.Visual.Handle, flowsToIds);
-			}
+			TrackRelationshipPeer(element.Visual.Handle, peer);
+			SemanticElementFactory.ApplyRelationshipAttributes(peer, element.Visual.Handle);
 		}
 		else if (automationProperty == AutomationElementIdentifiers.PositionInSetProperty &&
 			TryGetPeerOwner(peer, out element))
