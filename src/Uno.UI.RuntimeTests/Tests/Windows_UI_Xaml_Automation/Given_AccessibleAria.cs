@@ -278,6 +278,64 @@ namespace Uno.UI.RuntimeTests.Tests.Windows_UI_Xaml_Automation
 				target.Visibility = Visibility.Collapsed;
 				await UITestHelper.WaitFor(() => !SemanticElementHasAttribute(source, "aria-controls"), timeoutMS: 5000,
 					message: "aria-controls was not cleared after the controlled target became collapsed.");
+
+				target.Visibility = Visibility.Visible;
+				await UITestHelper.WaitFor(() => SemanticElementExists(target), timeoutMS: 5000,
+					message: "Timed out waiting for the controlled target semantic element to return.");
+				await UITestHelper.WaitFor(
+					() => GetSemanticAttribute(source, "aria-controls") == GetSemanticElementId(target),
+					timeoutMS: 5000,
+					message: "aria-controls was not restored after the controlled target became visible again.");
+			}
+			finally
+			{
+				TestServices.WindowHelper.WindowContent = null;
+			}
+		}
+
+		[TestMethod]
+		[RunsOnUIThread]
+		[PlatformCondition(ConditionMode.Include, RuntimeTestPlatforms.SkiaWasm)]
+		public async Task When_LabeledBy_Target_Visibility_Changes_Then_AriaLabelledBy_Is_Refreshed()
+		{
+			var labelled = new Button { Content = "Edit" };
+			var labeller = new TextBlock { Text = "Project contacts", Visibility = Visibility.Collapsed };
+			AutomationProperties.SetName(labeller, "Project contacts");
+			var panel = new StackPanel { Children = { labelled, labeller } };
+
+			try
+			{
+				await UITestHelper.Load(panel);
+				labelled.GetOrCreateAutomationPeer();
+
+				EnableAccessibilityThroughDom();
+				await UITestHelper.WaitFor(() => SemanticElementExists(labelled), timeoutMS: 5000,
+					message: "Timed out waiting for the labelled semantic element.");
+
+				AutomationProperties.SetLabeledBy(labelled, labeller);
+				await UITestHelper.WaitForIdle();
+				Assert.IsFalse(SemanticElementHasAttribute(labelled, "aria-labelledby"),
+					"aria-labelledby must not contain a dangling reference while the labeller is collapsed.");
+
+				labeller.Visibility = Visibility.Visible;
+				await UITestHelper.WaitFor(() => SemanticElementExists(labeller), timeoutMS: 5000,
+					message: "Timed out waiting for the labeller semantic element.");
+				await UITestHelper.WaitFor(
+					() => GetSemanticAttribute(labelled, "aria-labelledby") == GetSemanticElementId(labeller),
+					timeoutMS: 5000,
+					message: "aria-labelledby was not refreshed after the labeller became visible.");
+
+				labeller.Visibility = Visibility.Collapsed;
+				await UITestHelper.WaitFor(() => !SemanticElementHasAttribute(labelled, "aria-labelledby"), timeoutMS: 5000,
+					message: "aria-labelledby was not cleared after the labeller became collapsed.");
+
+				labeller.Visibility = Visibility.Visible;
+				await UITestHelper.WaitFor(() => SemanticElementExists(labeller), timeoutMS: 5000,
+					message: "Timed out waiting for the labeller semantic element to return.");
+				await UITestHelper.WaitFor(
+					() => GetSemanticAttribute(labelled, "aria-labelledby") == GetSemanticElementId(labeller),
+					timeoutMS: 5000,
+					message: "aria-labelledby was not restored after the labeller became visible again.");
 			}
 			finally
 			{

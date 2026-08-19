@@ -157,21 +157,8 @@ internal static partial class SemanticElementFactory
 			}
 		}
 
-		// Apply aria-labelledby when AutomationProperties.LabeledBy resolves to a labeller that has
-		// its own semantic node. The IDREF is computed here (not in AriaMapper) because only the
-		// WASM layer can map the labeller UIElement → its uno-semantics-{handle} id and verify the
-		// node is actually present (no dangling IDREF — FR-019/FR-022). aria-labelledby is independent
-		// of aria-label: both can be present.
-		if (created)
-		{
-			var labelledById = ResolveLabelledByIdRef(peer);
-			if (labelledById is not null)
-			{
-				NativeMethods.UpdateAriaLabelledBy(handle, labelledById);
-			}
-		}
-
-		// Apply relationship attributes (aria-describedby, aria-controls, aria-flowto)
+		// Apply ID-reference relationship attributes. These are refreshed by WebAssemblyAccessibility
+		// when related semantic nodes appear or disappear, so no dangling references survive.
 		if (created)
 		{
 			ApplyRelationshipAttributes(peer, handle);
@@ -1131,11 +1118,14 @@ internal static partial class SemanticElementFactory
 	}
 
 	/// <summary>
-	/// Applies ARIA relationship attributes (describedby, controls, flowto) to a semantic element.
-	/// Resolves AutomationPeer collections to space-separated DOM element IDs.
+	/// Applies ARIA ID-reference relationship attributes (labelledby, describedby, controls, flowto)
+	/// to a semantic element. References are emitted only for targets with semantic DOM nodes.
 	/// </summary>
 	internal static void ApplyRelationshipAttributes(AutomationPeer peer, IntPtr handle)
 	{
+		var labelledById = ResolveLabelledByIdRef(peer);
+		NativeMethods.UpdateAriaLabelledBy(handle, labelledById ?? string.Empty);
+
 		var describedByIds = ResolvePeerCollectionToIdList(peer.GetDescribedBy());
 		NativeMethods.UpdateAriaDescribedBy(handle, describedByIds ?? string.Empty);
 
